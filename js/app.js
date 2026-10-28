@@ -23,13 +23,38 @@ function sectionData(id){
     case"users":return[arr(s.users),n];
     case"features":return[arr(s.features),n];
     case"flow":return[arr(s.flow),n];
-    case"screens":return[arr(s.screens),n];
+    case"screens":return[pagesOf(s),n];
     case"data":return[arr(s.data),n];
     case"look":return[s.style,n];
     case"platform":return[s.platform,arr(s.constraints),n];
     case"success":return[arr(s.success),n];
     default:return[n];
   }
+}
+/* Pages: a tree (parent) with sections top to bottom. Older sessions only have flat "screens". */
+const SEC_TYPES=["hero","text","cards","gallery","form","testimonials","map","cta","faq","footer"];
+function pagesOf(s){
+  let pages=arr(s.pages).filter(p=>p&&p.name).map((p,i)=>({id:String(p.id||"p"+i),name:String(p.name),parent:p.parent?String(p.parent):null,inNav:p.inNav!==false,
+    sections:arr(p.sections).map(x=>typeof x==="string"?{type:"text",content:x}:x).filter(x=>x&&typeof x==="object")}));
+  if(!pages.length)pages=arr(s.screens).filter(x=>x&&x.name).map((x,i)=>{const c=Array.isArray(x.contents)?x.contents:String(x.contents||"").split(/[,;\n]/).map(t=>t.trim()).filter(Boolean);
+    return{id:"s"+i,name:String(x.name),parent:null,inNav:true,sections:c.map(t=>({type:"text",content:String(t)}))}});
+  const byId=new Map(pages.map(p=>[p.id,p]));
+  pages.forEach(p=>{const seen=new Set();let q=p;while(q&&q.parent){if(seen.has(q.id)||!byId.has(q.parent)){p.parent=null;break}seen.add(q.id);q=byId.get(q.parent)}});
+  return pages;
+}
+function siteMap(pages){
+  const kids=id=>pages.filter(p=>p.parent===id), linked=new Set(pages.flatMap(p=>p.sections.map(x=>x.to)).filter(Boolean));
+  const node=p=>`<li><button type="button" class="sm-node${p.inNav?"":" off"}" data-wf="${pages.indexOf(p)}" title="Show the ${esc(p.name)} wireframe">${esc(p.name)}${p.inNav?"":"<small>not in menu</small>"}</button>${kids(p.id).length?`<ul>${kids(p.id).map(node).join("")}</ul>`:""}</li>`;
+  const lost=pages.filter(p=>!p.inNav&&!p.parent&&!linked.has(p.id)), them=lost.length>1?"them":"it";
+  return`<div class="sitemap"><div class="k">Site map</div><ul class="tree"><li><span class="sm-root">${esc(state.spec.app_name||"Website")}</span><ul>${kids(null).map(node).join("")}</ul></li></ul>`
+    +(lost.length?`<p class="warn">Visitors can't reach ${lost.map(p=>esc(p.name)).join(", ")}. Add ${them} to the menu or link to ${them} from another page.</p>`:"")+`</div>`;
+}
+const SKETCH={hero:"<i></i><i></i>",cards:"<i></i><i></i><i></i>",gallery:"<i></i>".repeat(6),form:"<i></i><i></i><i></i>"};
+function wireframe(p,i,pages){
+  const nav=pages.filter(q=>q.inNav&&!q.parent), byId=new Map(pages.map(q=>[q.id,q]));
+  const secs=p.sections.map(x=>{const t=SEC_TYPES.includes(x.type)?x.type:"text", to=byId.get(x.to);
+    return`<div class="wf-sec t-${t}"><span class="wf-type">${esc(x.type||"section")}</span>${SKETCH[t]?`<div class="sk sk-${t}">${SKETCH[t]}</div>`:""}${x.content?`<span>${esc(x.content)}</span>`:""}${to?`<span class="wf-link">→ ${esc(to.name)}</span>`:""}</div>`}).join("");
+  return`<div class="wf" id="wf-${i}"><div class="wf-bar">${esc(p.name)}</div>${nav.length?`<div class="wf-nav">${nav.map(q=>`<span${q===p||q.id===p.parent?' class="on"':""}>${esc(q.name)}</span>`).join("")}</div>`:""}<div class="wf-body">${secs||`<span class="none">No sections yet</span>`}</div></div>`;
 }
 function hasContent(id){return sectionData(id).some(v=>Array.isArray(v)?v.length:!!(v&&String(v).trim()))}
 const sig=id=>JSON.stringify(sectionData(id));
@@ -73,8 +98,8 @@ function body(id){
         h.push(`<div class="moscow">${col("must","Must have")}${col("should","Should have")}${col("could","Could have")}</div>`)}break;
     case"flow":
       if(arr(s.flow).length)h.push(`<ol class="flow">${arr(s.flow).map(x=>`<li><span class="box">${esc(x)}</span></li>`).join("")}</ol>`);break;
-    case"screens":
-      if(arr(s.screens).length)h.push(`<div class="screens">${arr(s.screens).map(x=>{const c=Array.isArray(x.contents)?x.contents:String(x.contents||"").split(/[,;\n]/).map(t=>t.trim()).filter(Boolean);return`<div class="screen"><div class="screen-bar">${esc(x.name)}</div><ul>${c.map(i=>`<li>${esc(i)}</li>`).join("")}</ul></div>`}).join("")}</div>`);break;
+    case"screens":{const pg=pagesOf(s);
+      if(pg.length)h.push(siteMap(pg),`<div class="k">Wireframes</div><div class="wfs">${pg.map((p,i)=>wireframe(p,i,pg)).join("")}</div>`);break}
     case"data":
       if(arr(s.data).length)h.push(`<div class="entities">${arr(s.data).map(x=>`<div class="entity"><b>${esc(x.entity)}</b><ul>${arr(x.fields).map(f=>`<li>${esc(f)}</li>`).join("")}</ul></div>`).join("")}</div>`);break;
     case"look":if(s.style)h.push(`<p>${esc(s.style)}</p>`);break;
@@ -126,10 +151,10 @@ function send(text){
   state.messages.push({role:"user",text}); state.options=[]; lastErr=null; $("msg").value=""; autoGrow();
   persist(); coachTurn();
 }
-const SCHEMA=`{"app_name":"","one_liner":"","problem":"","users":[{"name":"","need":""}],"features":[{"name":"","detail":"","priority":"must|should|could"}],"flow":["step"],"screens":[{"name":"","contents":["what is on it"]}],"data":[{"entity":"","fields":["field"]}],"style":"","platform":"","constraints":[""],"success":[""],"notes":{"<topic id>":"summary"}}`;
+const SCHEMA=`{"app_name":"","one_liner":"","problem":"","users":[{"name":"","need":""}],"features":[{"name":"","detail":"","priority":"must|should|could"}],"flow":["step"],"pages":[{"id":"home","name":"","parent":null,"inNav":true,"sections":[{"type":"${SEC_TYPES.join("|")}","content":"","to":"<page id, or omit>"}]}],"data":[{"entity":"","fields":["field"]}],"style":"","platform":"","constraints":[""],"success":[""],"notes":{"<topic id>":"summary"}}`;
 function coachPrompt(){
   const guide=topics.map(t=>`- id "${t.id}" — ${t.label}: ${t.hint}${state.covered.includes(t.id)?" [COVERED]":""}`).join("\n");
-  const convo=state.messages.slice(-30).map(m=>(m.role==="coach"?"COACH: ":"USER: ")+m.text).join("\n");
+  const convo=state.messages.slice(-12).map(m=>(m.role==="coach"?"COACH: ":"USER: ")+m.text).join("\n");
   const customs=topics.filter(t=>!BUILTIN.has(t.id)).map(t=>t.id);
   return `You are PromptCoach, a friendly interviewer. You help a non-technical person who builds with "vibe coding" tools turn their idea for a WEBSITE into clear, complete requirements. Only websites are in scope: if the user describes something else (a phone app, a game, software), kindly explain that PromptCoach makes websites and help them shape the idea into a website.
 
@@ -146,7 +171,7 @@ How to interview:
 Interview guide (topic id, name, what to learn):
 ${guide}
 
-How topics map to the blueprint: idea → app_name, one_liner, problem; users → users; features → features (priority must/should/could, default must); flow → flow (ordered steps); screens → screens; data → data; look → style; platform → platform (languages and other practical details) and constraints (must have / must not have); screens → pages of the website; success → success (testable checks).${customs.length?` Topics ${customs.map(c=>`"${c}"`).join(", ")} → notes["<id>"] as a short summary.`:""} Write blueprint entries in short plain phrases, from the user's answers only.
+How topics map to the blueprint: idea → app_name, one_liner, problem; users → users; features → features (priority must/should/could, default must); flow → flow (ordered steps); screens → pages (id: short lowercase slug; parent: id of the page it sits under, or null; inNav: true if it is in the main menu; sections: top to bottom, each with a type, a few words of content, and "to" = page id when a button or link in it leads to another page); data → data; look → style; platform → platform (languages and other practical details) and constraints (must have / must not have); success → success (testable checks).${customs.length?` Topics ${customs.map(c=>`"${c}"`).join(", ")} → notes["<id>"] as a short summary.`:""} Write blueprint entries in short plain phrases, from the user's answers only.
 
 Current blueprint JSON:
 ${JSON.stringify(state.spec)}
@@ -155,8 +180,8 @@ Conversation so far:
 ${convo}
 
 Reply with ONLY one JSON object:
-{"reply": "your next message", "options": ["suggested answer", "..."], "topic": "<id of the topic your question is about>", "covered": ["<ids of topics answered well enough so far>"], "spec": ${SCHEMA}}
-The "spec" must be the FULL updated blueprint (keep everything still true, add what was learned, change what the user corrected).`;
+{"reply": "your next message", "options": ["suggested answer", "..."], "topic": "<id of the topic your question is about>", "covered": ["<ids of topics answered well enough so far>"], "changes": {}}
+"changes" holds ONLY the top-level blueprint fields that changed in this turn, each with its complete new value (for a list, the whole updated list). Leave out every field that did not change; use {} if nothing changed and null to clear a field. For "notes", give only the topic ids whose note changed. Blueprint fields and shapes: ${SCHEMA}`;
 }
 async function coachTurn(){
   if(aiMode!=="ai"){scriptedTurn();return}
@@ -165,7 +190,12 @@ async function coachTurn(){
   try{
     const r=await sample.json(coachPrompt(),{modelTier:"default",effort:"low",cache:false,signal:ctl.signal});
     if(!r||typeof r.reply!=="string")throw{code:"invalid_json"};
-    if(r.spec&&typeof r.spec==="object")state.spec=r.spec;
+    const ch=r.changes&&typeof r.changes==="object"&&!Array.isArray(r.changes)?r.changes:{};
+    Object.entries(ch).forEach(([k,v])=>{
+      if(k==="notes"&&v&&typeof v==="object")state.spec.notes={...(state.spec.notes||{}),...v};
+      else if(v==null)delete state.spec[k];
+      else state.spec[k]=v;
+    });
     const ids=new Set(topics.map(t=>t.id));
     state.covered=[...new Set([...state.covered,...arr(r.covered).filter(x=>ids.has(x))])];
     state.current=ids.has(r.topic)?r.topic:(topics.find(t=>!state.covered.includes(t.id))||{}).id||null;
@@ -205,6 +235,10 @@ function localPrompt(target){
   L.push(`Build a responsive website for me${target!=="Any AI code generator"?` in ${target}`:""}. It must work well on phones, tablets and computers. Follow these requirements exactly and don't add features I haven't listed. Use clearly marked placeholder text and images where content is missing.`,"");
   topics.forEach(t=>{if(!hasContent(t.id))return;
     L.push(`## ${t.label}${isConfirmed(t.id)?"":" (not yet confirmed)"}`);
+    if(t.id==="screens"){const pg=pagesOf(s), nm=id=>(pg.find(p=>p.id===id)||{}).name;
+      pg.forEach(p=>{L.push(`- ${p.name}${p.parent?` (under ${nm(p.parent)})`:""}${p.inNav?"":" (not in the main menu)"}`);
+        p.sections.forEach(x=>L.push(`  - ${x.type||"section"}${x.content?": "+x.content:""}${nm(x.to)?` (links to ${nm(x.to)})`:""}`))});
+      const n=(s.notes||{}).screens; if(n)L.push(`- ${n}`); L.push(""); return}
     const d=sectionData(t.id).flat().filter(Boolean).map(v=>typeof v==="object"?Object.values(v).flat().filter(Boolean).join(" — "):v);
     d.forEach(v=>L.push(`- ${v}`)); L.push("");});
   L.push("## Build order","- Start with a first version that covers only the must-have features, then stop so I can test it before adding more.");
@@ -267,6 +301,8 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("guide").hidden)
 /* ---------- wiring ---------- */
 function setView(v){$("app").dataset.view=v;$("tabChat").setAttribute("aria-selected",v==="chat");$("tabBp").setAttribute("aria-selected",v==="bp")}
 $("tabChat").onclick=()=>setView("chat"); $("tabBp").onclick=()=>setView("bp");
+$("sections").addEventListener("click",e=>{const b=e.target.closest("[data-wf]"), w=b&&$("wf-"+b.dataset.wf); if(!w)return;
+  w.scrollIntoView({block:"nearest",behavior:"smooth"}); w.classList.add("flash"); setTimeout(()=>w.classList.remove("flash"),1200)});
 $("composer").addEventListener("submit",e=>{e.preventDefault();send($("msg").value)});
 function autoGrow(){const m=$("msg");m.style.height="auto";m.style.height=Math.min(m.scrollHeight,160)+"px"}
 $("msg").addEventListener("input",autoGrow);

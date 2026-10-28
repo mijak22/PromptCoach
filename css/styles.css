@@ -124,11 +124,40 @@ h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0}
 .flow li .box::before{content:counter(step);font-family:var(--f-mono);font-size:11px;color:var(--accent);font-weight:600;margin-right:6px}
 .flow li:not(:last-child)::after{content:"→";color:var(--muted)}
 
-.screens{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
-.screen{border:1.5px solid var(--ink);border-radius:12px;overflow:hidden;background:var(--surface);min-width:0}
-.screen-bar{background:var(--ink);color:var(--surface);font-size:13px;font-weight:700;padding:5px 10px}
-.screen ul{margin:0;padding:8px 10px 10px;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px}
-.screen li{border:1px dashed var(--line);border-radius:4px;padding:3px 6px}
+/* Pages: site map tree + low-fi wireframes */
+.sitemap{display:flex;flex-direction:column;gap:6px}
+.tree,.tree ul{list-style:none;margin:0;padding:0}
+.tree ul{padding-left:24px}
+.tree li{position:relative}
+.tree ul li{padding-top:6px}
+.tree ul li::before{content:"";position:absolute;left:-14px;top:0;width:12px;height:22px;border-left:1.5px solid var(--line);border-bottom:1.5px solid var(--line);border-bottom-left-radius:6px}
+.tree ul li:not(:last-child)::after{content:"";position:absolute;left:-14px;top:0;bottom:0;border-left:1.5px solid var(--line)}
+.sm-root{display:inline-block;font-family:var(--f-display);font-weight:800;font-size:14px;padding:4px 10px;border-radius:8px;background:var(--ink);color:var(--surface)}
+.sm-node{display:inline-flex;align-items:baseline;gap:8px;border:1.5px solid var(--ink);background:var(--surface);border-radius:8px;padding:3px 10px;font-size:14px;font-weight:700;text-align:left}
+.sm-node:hover{background:var(--accent-soft)}
+.sm-node.off{border-style:dashed;border-color:var(--muted);font-weight:400}
+.sm-node small{font-size:11px;color:var(--muted)}
+.warn{margin:0;padding:6px 10px;border-radius:6px;background:var(--mark-soft);color:var(--mark-ink);font-size:13px}
+
+.wfs{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;align-items:start}
+.wf{border:1.5px solid var(--ink);border-radius:12px;overflow:hidden;background:var(--surface);min-width:0;scroll-margin:16px;transition:box-shadow .2s}
+.wf.flash{box-shadow:0 0 0 3px var(--mark)}
+.wf-bar{display:flex;align-items:center;gap:8px;background:var(--ink);color:var(--surface);font-size:13px;font-weight:700;padding:5px 10px}
+.wf-bar::before{content:"";flex:none;width:22px;height:6px;opacity:.5;background:radial-gradient(circle,currentColor 2.5px,transparent 3px) 0 0/8px 6px repeat-x}
+.wf-nav{display:flex;flex-wrap:wrap;gap:2px 10px;padding:5px 10px;border-bottom:1px solid var(--line);font-size:11px;color:var(--muted)}
+.wf-nav .on{color:var(--accent);font-weight:700;text-decoration:underline;text-underline-offset:3px}
+.wf-body{padding:8px;display:flex;flex-direction:column;gap:6px}
+.wf-sec{border:1px dashed var(--line);border-radius:6px;padding:6px 8px;display:flex;flex-direction:column;gap:4px;font-size:12.5px;min-width:0;overflow-wrap:anywhere}
+.wf-sec.t-hero{background:var(--surface-2);padding-block:12px}
+.wf-type{font-family:var(--f-mono);font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
+.wf-link{align-self:flex-start;font-size:11.5px;font-weight:700;color:var(--accent-ink);background:var(--accent);border-radius:999px;padding:1px 8px}
+.wf .none{color:var(--muted);font-size:12.5px}
+.sk{display:flex;gap:4px}
+.sk i{display:block;background:var(--line);border-radius:3px}
+.sk-hero{flex-direction:column}.sk-hero i{height:9px;width:75%}.sk-hero i+i{height:6px;width:50%}
+.sk-cards i{flex:1;height:22px}
+.sk-gallery{display:grid;grid-template-columns:repeat(3,1fr)}.sk-gallery i{height:16px}
+.sk-form{flex-direction:column}.sk-form i{height:9px;background:none;border:1px solid var(--line)}.sk-form i:last-child{width:40%;background:var(--line)}
 
 .entities{display:flex;flex-wrap:wrap;gap:10px}
 .entity{border:1px solid var(--line);border-radius:8px;min-width:0;flex:0 1 210px;overflow:hidden}

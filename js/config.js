@@ -8,7 +8,7 @@ const DEFAULT_TOPICS=[
  {id:"users",label:"Visitors",hint:"Who will visit the site, and what is each kind of visitor looking for?"},
  {id:"features",label:"What visitors can do",hint:"What should visitors be able to do on the site, like contact you, book a time, sign up or buy? Which are must-haves?"},
  {id:"flow",label:"A visitor's path",hint:"Walk me through a typical visit, step by step, from arriving on the site to reaching the goal."},
- {id:"screens",label:"Pages",hint:"Which pages should the site have, and what goes on each one?"},
+ {id:"screens",label:"Pages",hint:"Which pages should the site have, which belong in the main menu, and what goes on each one, from top to bottom?"},
  {id:"data",label:"Information shown or collected",hint:"What information does the site show or collect, like opening hours, prices, or the fields in a contact form?"},
  {id:"look",label:"Look and feel",hint:"How should it look and feel? Any colours, logo, mood or websites you like the style of?"},
  {id:"platform",label:"Practical details",hint:"Which languages should it be in? Anything it must have or must not have, like logins, payments or a blog?"},

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PromptCoach</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="brand"><h1>Prompt<span>Coach</span></h1><small>From website idea to build prompt</small></div>
+  <div class="progress" aria-label="Interview progress">
+    <div class="segs" id="segs"></div>
+    <div class="prog-label" id="progLabel"></div>
+  </div>
+  <div class="actions">
+    <button class="btn" id="guideBtn" type="button">Interview guide</button>
+    <button class="btn" id="newBtn" type="button">New session</button>
+  </div>
+</header>
+<nav class="tabs" role="tablist">
+  <button class="tab" role="tab" id="tabChat" aria-selected="true" type="button">Interview</button>
+  <button class="tab" role="tab" id="tabBp" aria-selected="false" type="button">Blueprint</button>
+</nav>
+
+<main class="app" id="app" data-view="chat">
+  <section class="col chat" aria-label="Interview">
+    <div id="notice" class="notice" hidden></div>
+    <div class="log" id="log" aria-live="polite"></div>
+    <div class="opts" id="opts"></div>
+    <form class="composer" id="composer">
+      <textarea id="msg" rows="1" placeholder="Type your answer…" aria-label="Your answer"></textarea>
+      <button class="btn primary" id="sendBtn" type="submit">Send</button>
+    </form>
+  </section>
+
+  <section class="col blueprint" aria-label="Blueprint">
+    <div class="bp-inner">
+      <div class="bp-head">
+        <div>
+          <h2 id="bpTitle">Blueprint</h2>
+          <p>Your website requirements fill in here as you talk. Check each section and confirm it, or tap Change to correct it.</p>
+        </div>
+        <div class="legend"><span>Not asked yet</span><span class="l-c">Covered</span><span class="l-ok">Confirmed</span></div>
+      </div>
+      <div id="sections" style="display:flex;flex-direction:column;gap:14px"></div>
+      <div class="prompt-box">
+        <h3>Your build prompt</h3>
+        <div class="prompt-row">
+          <label for="target" class="k">Write it for</label>
+          <select id="target">
+            <option>Any AI code generator</option><option>Lovable</option><option>Bolt</option><option>v0</option><option>Replit</option><option>Framer</option><option>Claude</option>
+          </select>
+          <button class="btn primary" id="genBtn" type="button">Generate prompt</button>
+          <button class="btn" id="stopBtn" type="button" hidden>Stop</button>
+          <button class="btn" id="copyBtn" type="button" hidden>Copy</button>
+        </div>
+        <p class="hint" id="genHint"></p>
+        <pre class="out" id="out" hidden></pre>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="overlay" id="guide" hidden>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="guideTitle">
+    <h2 id="guideTitle">Interview guide</h2>
+    <p>These are the topics the coach must cover. It asks about each one in the order that fits the conversation and adds its own follow-up questions when an answer is vague.</p>
+    <div class="g-list" id="gList"></div>
+    <div class="dialog-foot">
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="gAdd" type="button">Add topic</button><button class="btn" id="gReset" type="button">Restore defaults</button></div>
+      <div style="display:flex;gap:8px"><button class="btn" id="gCancel" type="button">Cancel</button><button class="btn primary" id="gSave" type="button">Save guide</button></div>
+    </div>
+  </div>
+</div>
+
+
+<script src="js/config.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

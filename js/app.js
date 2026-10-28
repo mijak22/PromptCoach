@@ -1,0 +1,282 @@
+/* PromptCoach app logic: interview, blueprint, prompt generation. */
+(function(){
+"use strict";
+const BUILTIN=new Set(DEFAULT_TOPICS.map(t=>t.id));
+const KEY_S="promptcoach.web.session.v1", KEY_G="promptcoach.web.guide.v1";
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const load=(k,f)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):f}catch(e){return f}};
+const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+
+let topics=load(KEY_G,null)||DEFAULT_TOPICS.map(t=>({...t}));
+function fresh(){return{messages:[{role:"coach",text:WELCOME,topic:"idea"}],spec:{},covered:[],current:"idea",confirmed:{},options:[],prompt:""}}
+let state=load(KEY_S,null)||fresh();
+let sample=null, aiMode="pending", busy=false, ctl=null, lastErr=null;
+const persist=()=>save(KEY_S,state);
+
+/* ---------- spec helpers ---------- */
+const arr=v=>Array.isArray(v)?v:[];
+function sectionData(id){
+  const s=state.spec, n=(s.notes||{})[id]||"";
+  switch(id){
+    case"idea":return[s.app_name,s.one_liner,s.problem,n];
+    case"users":return[arr(s.users),n];
+    case"features":return[arr(s.features),n];
+    case"flow":return[arr(s.flow),n];
+    case"screens":return[arr(s.screens),n];
+    case"data":return[arr(s.data),n];
+    case"look":return[s.style,n];
+    case"platform":return[s.platform,arr(s.constraints),n];
+    case"success":return[arr(s.success),n];
+    default:return[n];
+  }
+}
+function hasContent(id){return sectionData(id).some(v=>Array.isArray(v)?v.length:!!(v&&String(v).trim()))}
+const sig=id=>JSON.stringify(sectionData(id));
+const isConfirmed=id=>hasContent(id)&&state.confirmed[id]===sig(id);
+const label=id=>(topics.find(t=>t.id===id)||{}).label||id;
+
+/* ---------- rendering ---------- */
+function renderProgress(){
+  const segs=$("segs"); segs.innerHTML="";
+  topics.forEach(t=>{const d=document.createElement("div");d.className="seg"+(isConfirmed(t.id)?" conf":state.covered.includes(t.id)?" cov":"")+(state.current===t.id?" cur":"");d.title=t.label;segs.appendChild(d)});
+  const cov=topics.filter(t=>state.covered.includes(t.id)).length, conf=topics.filter(t=>isConfirmed(t.id)).length;
+  $("progLabel").textContent=`${cov} of ${topics.length} topics covered · ${conf} confirmed`+(state.current&&cov<topics.length?` · now: ${label(state.current)}`:"");
+}
+function renderLog(){
+  const log=$("log"); log.innerHTML="";
+  state.messages.forEach((m,i)=>{
+    const d=document.createElement("div"); d.className="msg "+m.role;
+    if(m.role==="coach"){d.innerHTML=`<span class="who">Coach${m.topic&&topics.some(t=>t.id===m.topic)?`<span class="topic">· ${esc(label(m.topic))}</span>`:""}</span>`;d.appendChild(document.createTextNode(m.text));
+      if(i===0&&state.messages.length===1){const ex=document.createElement("div");ex.className="examples";EXAMPLES.forEach(e=>{const b=document.createElement("button");b.type="button";b.className="opt";b.textContent=e;b.onclick=()=>send(e);ex.appendChild(b)});d.appendChild(ex)}}
+    else d.textContent=m.text;
+    log.appendChild(d);
+  });
+  if(busy){const t=document.createElement("div");t.className="msg coach thinking";t.textContent="Thinking…";log.appendChild(t)}
+  if(lastErr){const e=document.createElement("div");e.className="msg coach err";e.textContent=lastErr+" ";const b=document.createElement("button");b.className="btn sm";b.type="button";b.textContent="Try again";b.onclick=()=>{lastErr=null;coachTurn()};e.appendChild(b);log.appendChild(e)}
+  const o=$("opts"); o.innerHTML="";
+  if(!busy&&!lastErr) arr(state.options).forEach(t=>{const b=document.createElement("button");b.type="button";b.className="opt";b.textContent=t;b.onclick=()=>send(t);o.appendChild(b)});
+  log.scrollTop=log.scrollHeight;
+  $("sendBtn").disabled=busy;
+}
+function body(id){
+  const s=state.spec, n=(s.notes||{})[id], h=[];
+  switch(id){
+    case"idea":
+      if(s.app_name)h.push(`<div class="app-name">${esc(s.app_name)}</div>`);
+      if(s.one_liner)h.push(`<p class="one">${esc(s.one_liner)}</p>`);
+      if(s.problem)h.push(`<div><div class="k">Problem it solves</div><p>${esc(s.problem)}</p></div>`);break;
+    case"users":
+      if(arr(s.users).length)h.push(`<div class="persons">${arr(s.users).map(u=>`<div class="person"><b>${esc(u.name)}</b><span>${esc(u.need)}</span></div>`).join("")}</div>`);break;
+    case"features":
+      if(arr(s.features).length){const col=(p,t)=>{const f=arr(s.features).filter(x=>(x.priority||"must").toLowerCase()===p);return`<div class="mcol ${p}"><h4>${t}</h4>${f.length?f.map(x=>`<div class="feat"><b>${esc(x.name)}</b>${x.detail?`<span>${esc(x.detail)}</span>`:""}</div>`).join(""):`<span class="none">Nothing yet</span>`}</div>`};
+        h.push(`<div class="moscow">${col("must","Must have")}${col("should","Should have")}${col("could","Could have")}</div>`)}break;
+    case"flow":
+      if(arr(s.flow).length)h.push(`<ol class="flow">${arr(s.flow).map(x=>`<li><span class="box">${esc(x)}</span></li>`).join("")}</ol>`);break;
+    case"screens":
+      if(arr(s.screens).length)h.push(`<div class="screens">${arr(s.screens).map(x=>{const c=Array.isArray(x.contents)?x.contents:String(x.contents||"").split(/[,;\n]/).map(t=>t.trim()).filter(Boolean);return`<div class="screen"><div class="screen-bar">${esc(x.name)}</div><ul>${c.map(i=>`<li>${esc(i)}</li>`).join("")}</ul></div>`}).join("")}</div>`);break;
+    case"data":
+      if(arr(s.data).length)h.push(`<div class="entities">${arr(s.data).map(x=>`<div class="entity"><b>${esc(x.entity)}</b><ul>${arr(x.fields).map(f=>`<li>${esc(f)}</li>`).join("")}</ul></div>`).join("")}</div>`);break;
+    case"look":if(s.style)h.push(`<p>${esc(s.style)}</p>`);break;
+    case"platform":
+      if(s.platform)h.push(`<div><div class="k">Details</div><p>${esc(s.platform)}</p></div>`);
+      if(arr(s.constraints).length)h.push(`<div><div class="k">Must have / must not have</div><ul class="bul">${arr(s.constraints).map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`);break;
+    case"success":
+      if(arr(s.success).length)h.push(`<ul class="checks">${arr(s.success).map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`);break;
+  }
+  if(n)h.push(`<div class="note">${esc(n)}</div>`);
+  return h.join("");
+}
+function renderSections(){
+  const wrap=$("sections"); wrap.innerHTML="";
+  $("bpTitle").textContent=state.spec.app_name?`Blueprint: ${state.spec.app_name}`:"Blueprint";
+  topics.forEach(t=>{
+    const has=hasContent(t.id), conf=isConfirmed(t.id), cov=state.covered.includes(t.id), cur=state.current===t.id&&!cov;
+    const sec=document.createElement("article");
+    sec.className="sec"+(has?"":" empty")+(conf?" confirmed":"")+(state.current===t.id?" current":"");
+    const pill=conf?`<span class="pill ok">Confirmed</span>`:cov?`<span class="pill cov">Covered, please check</span>`:cur?`<span class="pill cur">Being asked now</span>`:has?`<span class="pill cov">In progress</span>`:`<span class="pill">Not asked yet</span>`;
+    sec.innerHTML=`<div class="sec-h"><h3>${esc(t.label)}</h3>${pill}</div>`+(has?body(t.id):`<p class="placeholder">${esc(t.hint)}</p>`);
+    if(has){const row=document.createElement("div");row.style.cssText="display:flex;gap:8px;flex-wrap:wrap";
+      const c=document.createElement("button");c.type="button";c.className="btn sm"+(conf?"":" primary");c.textContent=conf?"Undo confirm":"Looks right";
+      c.onclick=()=>{if(conf)delete state.confirmed[t.id];else state.confirmed[t.id]=sig(t.id);persist();renderAll()};
+      const ch=document.createElement("button");ch.type="button";ch.className="btn sm";ch.textContent="Change";
+      ch.onclick=()=>{setView("chat");const m=$("msg");m.value=`About "${t.label}": `;m.focus();m.setSelectionRange(m.value.length,m.value.length)};
+      row.append(c,ch);sec.appendChild(row)}
+    wrap.appendChild(sec);
+  });
+  const unc=topics.filter(t=>hasContent(t.id)&&!isConfirmed(t.id)).length, missing=topics.filter(t=>!hasContent(t.id)).length;
+  $("genHint").textContent=!topics.some(t=>hasContent(t.id))?"Answer a few questions first. The prompt is built from your blueprint."
+    :missing||unc?`${missing?missing+" section"+(missing>1?"s are":" is")+" still empty. ":""}${unc?unc+" section"+(unc>1?"s aren't":" isn't")+" confirmed yet, so "+(unc>1?"they":"it")+" will be marked as not confirmed in the prompt.":""}`
+    :"Everything is confirmed. Your prompt will use exactly these requirements.";
+  $("genBtn").disabled=busy||!topics.some(t=>hasContent(t.id));
+  if(state.prompt){$("out").hidden=false;$("out").textContent=state.prompt;$("copyBtn").hidden=false}else{$("out").hidden=true;$("copyBtn").hidden=true}
+}
+function renderNotice(){
+  const n=$("notice"), allCov=topics.every(t=>state.covered.includes(t.id));
+  n.innerHTML="";
+  if(aiMode==="scripted"){n.hidden=false;n.textContent="The AI coach isn't available in this view, so I'm asking the standard guide questions in order. Your blueprint and prompt still work."}
+  else if(allCov&&!topics.every(t=>isConfirmed(t.id))){n.hidden=false;n.append("All topics are covered. Check each blueprint section and confirm it, then generate your prompt. ");const b=document.createElement("button");b.className="btn sm";b.type="button";b.textContent="Open blueprint";b.onclick=()=>{setView("bp");document.querySelector(".blueprint").scrollTop=0};n.appendChild(b)}
+  else n.hidden=true;
+}
+function renderAll(){renderProgress();renderLog();renderSections();renderNotice()}
+
+/* ---------- interview ---------- */
+function send(text){
+  text=String(text||"").trim(); if(!text||busy)return;
+  state.messages.push({role:"user",text}); state.options=[]; lastErr=null; $("msg").value=""; autoGrow();
+  persist(); coachTurn();
+}
+const SCHEMA=`{"app_name":"","one_liner":"","problem":"","users":[{"name":"","need":""}],"features":[{"name":"","detail":"","priority":"must|should|could"}],"flow":["step"],"screens":[{"name":"","contents":["what is on it"]}],"data":[{"entity":"","fields":["field"]}],"style":"","platform":"","constraints":[""],"success":[""],"notes":{"<topic id>":"summary"}}`;
+function coachPrompt(){
+  const guide=topics.map(t=>`- id "${t.id}" — ${t.label}: ${t.hint}${state.covered.includes(t.id)?" [COVERED]":""}`).join("\n");
+  const convo=state.messages.slice(-30).map(m=>(m.role==="coach"?"COACH: ":"USER: ")+m.text).join("\n");
+  const customs=topics.filter(t=>!BUILTIN.has(t.id)).map(t=>t.id);
+  return `You are PromptCoach, a friendly interviewer. You help a non-technical person who builds with "vibe coding" tools turn their idea for a WEBSITE into clear, complete requirements. Only websites are in scope: if the user describes something else (a phone app, a game, software), kindly explain that PromptCoach makes websites and help them shape the idea into a website.
+
+How to interview:
+- Ask exactly ONE question per reply, in plain everyday language. Avoid jargon; if a technical word is unavoidable, explain it in a few words.
+- Adapt to their idea. If the last answer was vague, incomplete or contradicts something earlier, ask a short follow-up about it before moving on. Make questions concrete and specific to their website (mention their site, visitors, pages and features by name). Think like a web designer: ask about things a website needs that a non-technical person forgets, such as the home page message, navigation, contact details, mobile use and calls to action.
+- Over the conversation you MUST cover every topic in the interview guide. When the current topic is answered well enough, move to the uncovered topic that follows most naturally.
+- Offer 2 to 4 short suggested answers the user can tap, tailored to their idea. Suggestions are options, not decisions.
+- Never add requirements the user has not said or agreed to. If the user picks a suggestion, it counts as agreed.
+- If the user writes 'About "<section>": ...', they are correcting that section: update it and confirm briefly what you changed, then continue.
+- When every topic is covered, say so briefly and ask them to check and confirm the blueprint on the right.
+- Keep "reply" under 70 words. Brief encouragement is fine, flattery is not.
+
+Interview guide (topic id, name, what to learn):
+${guide}
+
+How topics map to the blueprint: idea → app_name, one_liner, problem; users → users; features → features (priority must/should/could, default must); flow → flow (ordered steps); screens → screens; data → data; look → style; platform → platform (languages and other practical details) and constraints (must have / must not have); screens → pages of the website; success → success (testable checks).${customs.length?` Topics ${customs.map(c=>`"${c}"`).join(", ")} → notes["<id>"] as a short summary.`:""} Write blueprint entries in short plain phrases, from the user's answers only.
+
+Current blueprint JSON:
+${JSON.stringify(state.spec)}
+
+Conversation so far:
+${convo}
+
+Reply with ONLY one JSON object:
+{"reply": "your next message", "options": ["suggested answer", "..."], "topic": "<id of the topic your question is about>", "covered": ["<ids of topics answered well enough so far>"], "spec": ${SCHEMA}}
+The "spec" must be the FULL updated blueprint (keep everything still true, add what was learned, change what the user corrected).`;
+}
+async function coachTurn(){
+  if(aiMode!=="ai"){scriptedTurn();return}
+  busy=true; renderAll();
+  ctl=new AbortController();
+  try{
+    const r=await sample.json(coachPrompt(),{modelTier:"default",effort:"low",cache:false,signal:ctl.signal});
+    if(!r||typeof r.reply!=="string")throw{code:"invalid_json"};
+    if(r.spec&&typeof r.spec==="object")state.spec=r.spec;
+    const ids=new Set(topics.map(t=>t.id));
+    state.covered=[...new Set([...state.covered,...arr(r.covered).filter(x=>ids.has(x))])];
+    state.current=ids.has(r.topic)?r.topic:(topics.find(t=>!state.covered.includes(t.id))||{}).id||null;
+    state.options=arr(r.options).filter(x=>typeof x==="string"&&x.trim()).slice(0,4);
+    state.messages.push({role:"coach",text:r.reply.trim(),topic:state.current});
+    persist();
+  }catch(e){
+    const c=e&&e.code;
+    if(["not_granted","sampling_disabled","not_declared","capability_disabled","capability_removed"].includes(c)){aiMode="scripted";busy=false;scriptedTurn(true);return}
+    if(c==="cancelled"){}
+    else if(c==="rate_limited")lastErr="The coach has been asked a lot in a short time. Wait a minute, then try again.";
+    else if(c==="session_expired")lastErr="You've been signed out. Sign in to Claude again, then try again.";
+    else if(c==="invalid_json")lastErr="The coach's answer came back in the wrong shape.";
+    else lastErr="The coach couldn't answer just now.";
+  }finally{busy=false;ctl=null;renderAll()}
+}
+function scriptedTurn(switched){
+  const last=[...state.messages].reverse().find(m=>m.role==="user");
+  const cur=state.current&&topics.some(t=>t.id===state.current)?state.current:(topics.find(t=>!state.covered.includes(t.id))||{}).id;
+  if(last&&cur&&!switched){
+    state.spec.notes=state.spec.notes||{};
+    state.spec.notes[cur]=(state.spec.notes[cur]?state.spec.notes[cur]+"\n":"")+last.text;
+    if(!state.covered.includes(cur))state.covered.push(cur);
+  }else if(last&&cur&&switched&&!state.covered.includes(cur)){
+    state.spec.notes=state.spec.notes||{};state.spec.notes[cur]=last.text;state.covered.push(cur);
+  }
+  const next=topics.find(t=>!state.covered.includes(t.id));
+  state.current=next?next.id:null; state.options=[];
+  state.messages.push(next?{role:"coach",text:next.hint,topic:next.id}:{role:"coach",text:"That's every topic. Check each section of the blueprint, confirm it, and then generate your prompt."});
+  persist(); renderAll();
+}
+
+/* ---------- prompt generation ---------- */
+function statusList(){return topics.map(t=>`${t.label}: ${!hasContent(t.id)?"EMPTY":isConfirmed(t.id)?"confirmed":"UNCONFIRMED"}`).join("\n")}
+function localPrompt(target){
+  const s=state.spec, L=[];
+  L.push(`Build a responsive website for me${target!=="Any AI code generator"?` in ${target}`:""}. It must work well on phones, tablets and computers. Follow these requirements exactly and don't add features I haven't listed. Use clearly marked placeholder text and images where content is missing.`,"");
+  topics.forEach(t=>{if(!hasContent(t.id))return;
+    L.push(`## ${t.label}${isConfirmed(t.id)?"":" (not yet confirmed)"}`);
+    const d=sectionData(t.id).flat().filter(Boolean).map(v=>typeof v==="object"?Object.values(v).flat().filter(Boolean).join(" — "):v);
+    d.forEach(v=>L.push(`- ${v}`)); L.push("");});
+  L.push("## Build order","- Start with a first version that covers only the must-have features, then stop so I can test it before adding more.");
+  return L.join("\n");
+}
+async function generate(){
+  if(busy)return;
+  const target=$("target").value;
+  if(aiMode!=="ai"){state.prompt=localPrompt(target);persist();renderAll();return}
+  busy=true; ctl=new AbortController(); $("stopBtn").hidden=false; $("genBtn").disabled=true;
+  $("out").hidden=false; $("out").textContent="Writing your prompt…"; $("copyBtn").hidden=true;
+  const p=`Write a build prompt that a non-technical person will paste into ${target==="Any AI code generator"?"a vibe-coding tool":target} to create their WEBSITE. The reader of the prompt is the AI tool, so use precise web terms it understands well (pages, sections, navigation, hero, call to action, responsive layout, form fields and validation), even though the person who gave the requirements is not technical.
+
+Write clear, direct instructions. Use these markdown headings in this order: Overview, Target visitors, Site map and navigation, Pages (each page with its sections in order, top to bottom), Features (with sub-lists Must have / Should have / Could have), Visitor journey (numbered steps), Content and forms (information shown, form fields), Design (colours, typography mood, imagery, tone of voice), Technical requirements (responsive for phone/tablet/desktop, accessible, fast, SEO basics with page titles and descriptions, plus any limits given), Acceptance criteria (a checklist the user can test), Build order (first version = must-haves only, then pause for review). Where real text or images are not provided, ask the tool to use clearly marked placeholder content.
+Use ONLY the requirements below. Do not invent features. If something needed is missing, pick the simplest sensible default and mark it "(assumption)". Sections whose status is UNCONFIRMED: include them, but end each such item with "(not yet confirmed)".${target!=="Any AI code generator"?` Phrase it in the way that works best for ${target}.`:""}
+Reply with only the prompt text, nothing before or after it.
+
+Requirements JSON:
+${JSON.stringify(state.spec)}
+
+Section status:
+${statusList()}${topics.filter(t=>!BUILTIN.has(t.id)).map(t=>`\nExtra topic "${t.label}" is stored in notes["${t.id}"].`).join("")}`;
+  try{
+    const {text,truncated}=await sample(p,{modelTier:"default",cache:false,signal:ctl.signal,onText:({text})=>{$("out").textContent=text}});
+    state.prompt=text+(truncated?"\n\n[The prompt was cut short. Generate again.]":""); persist();
+  }catch(e){
+    const c=e&&e.code;
+    if(["not_granted","sampling_disabled","not_declared","capability_disabled","capability_removed"].includes(c)){aiMode="scripted";state.prompt=localPrompt(target);persist()}
+    else if(c==="cancelled"){state.prompt=e.text||state.prompt}
+    else{$("genHint").textContent=c==="rate_limited"?"Too many requests just now. Wait a minute and try again.":"The prompt couldn't be written just now. Try again."}
+  }finally{busy=false;ctl=null;$("stopBtn").hidden=true;renderAll()}
+}
+async function copy(){
+  const t=state.prompt; const b=$("copyBtn");
+  try{await navigator.clipboard.writeText(t);b.textContent="Copied"}
+  catch(e){const r=document.createRange();r.selectNodeContents($("out"));const s=getSelection();s.removeAllRanges();s.addRange(r);b.textContent="Selected, press Ctrl+C"}
+  setTimeout(()=>b.textContent="Copy",2200);
+}
+
+/* ---------- guide editor ---------- */
+let draft=[];
+function renderGuide(){
+  const l=$("gList"); l.innerHTML="";
+  draft.forEach((t,i)=>{const r=document.createElement("div");r.className="g-row";
+    r.innerHTML=`<input id="g-l-${i}" aria-label="Topic name" value="${esc(t.label)}"><textarea id="g-h-${i}" aria-label="What to learn">${esc(t.hint)}</textarea><button class="btn sm" type="button" aria-label="Remove ${esc(t.label)}">Remove</button>`;
+    r.querySelector("input").oninput=e=>t.label=e.target.value;
+    r.querySelector("textarea").oninput=e=>t.hint=e.target.value;
+    r.querySelector("button").onclick=()=>{draft.splice(i,1);renderGuide()};
+    l.appendChild(r)});
+}
+$("guideBtn").onclick=()=>{draft=topics.map(t=>({...t}));renderGuide();$("guide").hidden=false};
+$("gCancel").onclick=()=>$("guide").hidden=true;
+$("gAdd").onclick=()=>{draft.push({id:"t"+Date.now().toString(36),label:"New topic",hint:"What should the coach find out?"});renderGuide();const i=draft.length-1;$("g-l-"+i).select()};
+$("gReset").onclick=()=>{draft=DEFAULT_TOPICS.map(t=>({...t}));renderGuide()};
+$("gSave").onclick=()=>{topics=draft.filter(t=>t.label.trim()).map(t=>({...t,label:t.label.trim(),hint:t.hint.trim()||t.label.trim()}));if(!topics.length)topics=DEFAULT_TOPICS.map(t=>({...t}));save(KEY_G,topics);
+  if(!topics.some(t=>t.id===state.current))state.current=(topics.find(t=>!state.covered.includes(t.id))||{}).id||null;persist();$("guide").hidden=true;renderAll()};
+$("guide").addEventListener("click",e=>{if(e.target.id==="guide")$("guide").hidden=true});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("guide").hidden)$("guide").hidden=true});
+
+/* ---------- wiring ---------- */
+function setView(v){$("app").dataset.view=v;$("tabChat").setAttribute("aria-selected",v==="chat");$("tabBp").setAttribute("aria-selected",v==="bp")}
+$("tabChat").onclick=()=>setView("chat"); $("tabBp").onclick=()=>setView("bp");
+$("composer").addEventListener("submit",e=>{e.preventDefault();send($("msg").value)});
+function autoGrow(){const m=$("msg");m.style.height="auto";m.style.height=Math.min(m.scrollHeight,160)+"px"}
+$("msg").addEventListener("input",autoGrow);
+$("msg").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send($("msg").value)}});
+$("newBtn").onclick=()=>{if(busy&&ctl)ctl.abort();state=fresh();lastErr=null;persist();renderAll();$("msg").focus()};
+$("genBtn").onclick=generate; $("stopBtn").onclick=()=>ctl&&ctl.abort(); $("copyBtn").onclick=copy;
+
+renderAll();
+(async()=>{
+  try{sample=window.claude&&window.claude.use?await window.claude.use("sample"):null}catch(e){sample=null}
+  aiMode=sample?"ai":"scripted"; renderAll();
+})();
+})();

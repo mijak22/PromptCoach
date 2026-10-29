@@ -37,8 +37,23 @@
     </form>
   </section>
 
-  <section class="col blueprint" aria-label="Blueprint">
-    <div class="bp-inner">
+  <section class="col blueprint" aria-label="Blueprint and wireframes">
+    <div class="pane-bar">
+      <div class="switch" id="paneSwitch" data-pane="bp" role="group" aria-label="Show">
+        <button type="button" data-pane="bp" aria-pressed="true">Blueprint</button>
+        <button type="button" data-pane="wf" aria-pressed="false">Wireframes</button>
+      </div>
+    </div>
+    <div class="bp-inner" id="paneWf" hidden>
+      <div class="bp-head">
+        <div>
+          <h2>Site map</h2>
+          <p>How the pages of your website connect. Open a page's wireframe to see a rough sketch of its layout, from top to bottom.</p>
+        </div>
+      </div>
+      <div id="siteMap"></div>
+    </div>
+    <div class="bp-inner" id="paneBp">
       <div class="bp-head">
         <div>
           <h2 id="bpTitle">Blueprint</h2>
@@ -76,7 +91,15 @@
     </div>
   </div>
 </div>
-
+<div class="overlay" id="wfPop" hidden>
+  <div class="dialog wf-dialog" role="dialog" aria-modal="true" aria-labelledby="wfPopTitle">
+    <div class="wf-dialog-h">
+      <div><div class="k">Wireframe</div><h2 id="wfPopTitle"></h2></div>
+      <button class="btn sm" id="wfClose" type="button">Close</button>
+    </div>
+    <div id="wfPopBody"></div>
+  </div>
+</div>
 
 <script src="js/config.js"></script>
 <script src="js/app.js"></script>

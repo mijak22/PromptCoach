@@ -38,23 +38,41 @@ function pagesOf(s){
     sections:arr(p.sections).map(x=>typeof x==="string"?{type:"text",content:x}:x).filter(x=>x&&typeof x==="object")}));
   if(!pages.length)pages=arr(s.screens).filter(x=>x&&x.name).map((x,i)=>{const c=Array.isArray(x.contents)?x.contents:String(x.contents||"").split(/[,;\n]/).map(t=>t.trim()).filter(Boolean);
     return{id:"s"+i,name:String(x.name),parent:null,inNav:true,sections:c.map(t=>({type:"text",content:String(t)}))}});
+  if(!pages.length)pages=pagesFromNote((s.notes||{}).screens);
   const byId=new Map(pages.map(p=>[p.id,p]));
   pages.forEach(p=>{const seen=new Set();let q=p;while(q&&q.parent){if(seen.has(q.id)||!byId.has(q.parent)){p.parent=null;break}seen.add(q.id);q=byId.get(q.parent)}});
   return pages;
 }
+/* Without the AI, the Pages answer is only free text, e.g. "Home: welcome and prices, About, Booking and Contact".
+   Guess the page names from it: one per line, comma or "and"/"og"; text after a colon becomes the page's content. */
+function pagesFromNote(note){
+  const seen=new Set(), out=[];
+  String(note||"").split(/[\n;]+/).forEach(line=>line.split(",").forEach(part=>{
+    const m=part.match(/^([^:]+):(.*)$/), names=m?[m[1]]:part.split(/\s+(?:and|og|&)\s+/i);
+    names.forEach(raw=>{
+      const name=raw.trim().replace(/^[-*•\d.)\s]+/,"").replace(/^(?:an?|the|en|et)\s+/i,"").replace(/\s+(?:pages?|sider?|siden)$/i,"").replace(/[.!]+$/,"").trim();
+      if(!name||name.split(/\s+/).length>4||seen.has(name.toLowerCase()))return;
+      seen.add(name.toLowerCase());
+      const content=m?m[2].trim():"";
+      out.push({id:"n"+out.length,name:name[0].toUpperCase()+name.slice(1),parent:null,inNav:true,sections:content?[{type:"text",content}]:[]});
+    });
+  }));
+  return out;
+}
 function siteMap(pages){
   const kids=id=>pages.filter(p=>p.parent===id), linked=new Set(pages.flatMap(p=>p.sections.map(x=>x.to)).filter(Boolean));
-  const node=p=>`<li><button type="button" class="sm-node${p.inNav?"":" off"}" data-wf="${pages.indexOf(p)}" title="Show the ${esc(p.name)} wireframe">${esc(p.name)}${p.inNav?"":"<small>not in menu</small>"}</button>${kids(p.id).length?`<ul>${kids(p.id).map(node).join("")}</ul>`:""}</li>`;
+  const node=p=>`<li><div class="sm-page"><span class="sm-node${p.inNav?"":" off"}">${esc(p.name)}${p.inNav?"":"<small>not in menu</small>"}</span><button type="button" class="btn sm sm-show" data-wf="${esc(p.id)}" aria-label="Show the ${esc(p.name)} wireframe">Show wireframe</button></div>${kids(p.id).length?`<ul>${kids(p.id).map(node).join("")}</ul>`:""}</li>`;
   const lost=pages.filter(p=>!p.inNav&&!p.parent&&!linked.has(p.id)), them=lost.length>1?"them":"it";
-  return`<div class="sitemap"><div class="k">Site map</div><ul class="tree"><li><span class="sm-root">${esc(state.spec.app_name||"Website")}</span><ul>${kids(null).map(node).join("")}</ul></li></ul>`
+  return`<div class="sitemap"><ul class="tree"><li><span class="sm-root">${esc(state.spec.app_name||"Website")}</span><ul>${kids(null).map(node).join("")}</ul></li></ul>`
     +(lost.length?`<p class="warn">Visitors can't reach ${lost.map(p=>esc(p.name)).join(", ")}. Add ${them} to the menu or link to ${them} from another page.</p>`:"")+`</div>`;
 }
 const SKETCH={hero:"<i></i><i></i>",cards:"<i></i><i></i><i></i>",gallery:"<i></i>".repeat(6),form:"<i></i><i></i><i></i>"};
-function wireframe(p,i,pages){
+/* Links and menu items inside a wireframe open the page they lead to. */
+function wireframe(p,pages){
   const nav=pages.filter(q=>q.inNav&&!q.parent), byId=new Map(pages.map(q=>[q.id,q]));
   const secs=p.sections.map(x=>{const t=SEC_TYPES.includes(x.type)?x.type:"text", to=byId.get(x.to);
-    return`<div class="wf-sec t-${t}"><span class="wf-type">${esc(x.type||"section")}</span>${SKETCH[t]?`<div class="sk sk-${t}">${SKETCH[t]}</div>`:""}${x.content?`<span>${esc(x.content)}</span>`:""}${to?`<span class="wf-link">→ ${esc(to.name)}</span>`:""}</div>`}).join("");
-  return`<div class="wf" id="wf-${i}"><div class="wf-bar">${esc(p.name)}</div>${nav.length?`<div class="wf-nav">${nav.map(q=>`<span${q===p||q.id===p.parent?' class="on"':""}>${esc(q.name)}</span>`).join("")}</div>`:""}<div class="wf-body">${secs||`<span class="none">No sections yet</span>`}</div></div>`;
+    return`<div class="wf-sec t-${t}"><span class="wf-type">${esc(x.type||"section")}</span>${SKETCH[t]?`<div class="sk sk-${t}">${SKETCH[t]}</div>`:""}${x.content?`<span>${esc(x.content)}</span>`:""}${to?`<button type="button" class="wf-link" data-wf="${esc(to.id)}">→ ${esc(to.name)}</button>`:""}</div>`}).join("");
+  return`<div class="wf"><div class="wf-bar">${esc(p.name)}</div>${nav.length?`<div class="wf-nav">${nav.map(q=>`<button type="button" data-wf="${esc(q.id)}"${q===p||q.id===p.parent?' class="on"':""}>${esc(q.name)}</button>`).join("")}</div>`:""}<div class="wf-body">${secs||`<span class="none">No sections yet</span>`}</div></div>`;
 }
 function hasContent(id){return sectionData(id).some(v=>Array.isArray(v)?v.length:!!(v&&String(v).trim()))}
 const sig=id=>JSON.stringify(sectionData(id));
@@ -98,8 +116,9 @@ function body(id){
         h.push(`<div class="moscow">${col("must","Must have")}${col("should","Should have")}${col("could","Could have")}</div>`)}break;
     case"flow":
       if(arr(s.flow).length)h.push(`<ol class="flow">${arr(s.flow).map(x=>`<li><span class="box">${esc(x)}</span></li>`).join("")}</ol>`);break;
-    case"screens":{const pg=pagesOf(s);
-      if(pg.length)h.push(siteMap(pg),`<div class="k">Wireframes</div><div class="wfs">${pg.map((p,i)=>wireframe(p,i,pg)).join("")}</div>`);break}
+    case"screens":{const pg=pagesOf(s), nm=id=>(pg.find(p=>p.id===id)||{}).name;
+      if(pg.length)h.push(`<ul class="pagelist">${pg.map(p=>`<li><b>${esc(p.name)}</b>${p.parent?`<small>under ${esc(nm(p.parent))}</small>`:""}${p.inNav?"":"<small>not in menu</small>"}${p.sections.length?`<span>${p.sections.map(x=>esc(x.type||"section")).join(" · ")}</span>`:""}</li>`).join("")}</ul>`,
+        `<button type="button" class="btn sm" data-pane-go="wf" style="align-self:flex-start">See site map and wireframes</button>`);break}
     case"data":
       if(arr(s.data).length)h.push(`<div class="entities">${arr(s.data).map(x=>`<div class="entity"><b>${esc(x.entity)}</b><ul>${arr(x.fields).map(f=>`<li>${esc(f)}</li>`).join("")}</ul></div>`).join("")}</div>`);break;
     case"look":if(s.style)h.push(`<p>${esc(s.style)}</p>`);break;
@@ -140,10 +159,25 @@ function renderNotice(){
   const n=$("notice"), allCov=topics.every(t=>state.covered.includes(t.id));
   n.innerHTML="";
   if(aiMode==="scripted"){n.hidden=false;n.textContent="The AI coach isn't available in this view, so I'm asking the standard guide questions in order. Your blueprint and prompt still work."}
-  else if(allCov&&!topics.every(t=>isConfirmed(t.id))){n.hidden=false;n.append("All topics are covered. Check each blueprint section and confirm it, then generate your prompt. ");const b=document.createElement("button");b.className="btn sm";b.type="button";b.textContent="Open blueprint";b.onclick=()=>{setView("bp");document.querySelector(".blueprint").scrollTop=0};n.appendChild(b)}
+  else if(allCov&&!topics.every(t=>isConfirmed(t.id))){n.hidden=false;n.append("All topics are covered. Check each blueprint section and confirm it, then generate your prompt. ");const b=document.createElement("button");b.className="btn sm";b.type="button";b.textContent="Open blueprint";b.onclick=()=>{setView("bp");setPane("bp")};n.appendChild(b)}
   else n.hidden=true;
 }
-function renderAll(){renderProgress();renderLog();renderSections();renderNotice()}
+function renderWireframes(){
+  const pg=pagesOf(state.spec);
+  $("siteMap").innerHTML=pg.length?siteMap(pg):`<p class="placeholder">No pages yet. When you tell the coach which pages your website needs, the site map appears here and you can open a wireframe of each page.</p>`;
+  if(wfOpen){const p=pg.find(x=>x.id===wfOpen); if(p)fillWf(p,pg);else closeWf()}
+}
+function renderAll(){renderProgress();renderLog();renderSections();renderWireframes();renderNotice()}
+
+/* ---------- wireframe pop-up ---------- */
+let wfOpen=null, wfFrom=null;
+function fillWf(p,pg){$("wfPopTitle").textContent=p.name;$("wfPopBody").innerHTML=wireframe(p,pg)}
+function openWf(id){
+  const pg=pagesOf(state.spec), p=pg.find(x=>x.id===id); if(!p)return;
+  if(!wfOpen)wfFrom=document.activeElement;
+  wfOpen=id; fillWf(p,pg); $("wfPop").hidden=false; $("wfClose").focus();
+}
+function closeWf(){wfOpen=null;$("wfPop").hidden=true;if(wfFrom&&wfFrom.isConnected)wfFrom.focus();wfFrom=null}
 
 /* ---------- interview ---------- */
 function send(text){
@@ -296,13 +330,22 @@ $("gReset").onclick=()=>{draft=DEFAULT_TOPICS.map(t=>({...t}));renderGuide()};
 $("gSave").onclick=()=>{topics=draft.filter(t=>t.label.trim()).map(t=>({...t,label:t.label.trim(),hint:t.hint.trim()||t.label.trim()}));if(!topics.length)topics=DEFAULT_TOPICS.map(t=>({...t}));save(KEY_G,topics);
   if(!topics.some(t=>t.id===state.current))state.current=(topics.find(t=>!state.covered.includes(t.id))||{}).id||null;persist();$("guide").hidden=true;renderAll()};
 $("guide").addEventListener("click",e=>{if(e.target.id==="guide")$("guide").hidden=true});
-document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("guide").hidden)$("guide").hidden=true});
+document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if(!$("wfPop").hidden)closeWf();else if(!$("guide").hidden)$("guide").hidden=true});
 
 /* ---------- wiring ---------- */
 function setView(v){$("app").dataset.view=v;$("tabChat").setAttribute("aria-selected",v==="chat");$("tabBp").setAttribute("aria-selected",v==="bp")}
 $("tabChat").onclick=()=>setView("chat"); $("tabBp").onclick=()=>setView("bp");
-$("sections").addEventListener("click",e=>{const b=e.target.closest("[data-wf]"), w=b&&$("wf-"+b.dataset.wf); if(!w)return;
-  w.scrollIntoView({block:"nearest",behavior:"smooth"}); w.classList.add("flash"); setTimeout(()=>w.classList.remove("flash"),1200)});
+/* Right side: Blueprint or Wireframes (site map + pop-up wireframes). */
+function setPane(v){
+  $("paneBp").hidden=v!=="bp"; $("paneWf").hidden=v!=="wf"; $("paneSwitch").dataset.pane=v;
+  $("paneSwitch").querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.pane===v));
+  document.querySelector(".blueprint").scrollTop=0;
+}
+$("paneSwitch").addEventListener("click",e=>{const b=e.target.closest("button[data-pane]");if(b)setPane(b.dataset.pane)});
+$("sections").addEventListener("click",e=>{if(e.target.closest("[data-pane-go]"))setPane("wf")});
+$("siteMap").addEventListener("click",e=>{const b=e.target.closest("[data-wf]");if(b)openWf(b.dataset.wf)});
+$("wfPop").addEventListener("click",e=>{if(e.target.id==="wfPop")return closeWf();const b=e.target.closest("[data-wf]");if(b)openWf(b.dataset.wf)});
+$("wfClose").onclick=closeWf;
 $("composer").addEventListener("submit",e=>{e.preventDefault();send($("msg").value)});
 function autoGrow(){const m=$("msg");m.style.height="auto";m.style.height=Math.min(m.scrollHeight,160)+"px"}
 $("msg").addEventListener("input",autoGrow);

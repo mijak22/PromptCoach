@@ -2,7 +2,7 @@
 (function(){
 "use strict";
 const BUILTIN=new Set(DEFAULT_TOPICS.map(t=>t.id));
-const KEY_S="promptcoach.web.session.v1", KEY_G="promptcoach.web.guide.v1";
+const KEY_S="promptcoach.web.session.v1", KEY_G="promptcoach.web.guide.v1", KEY_I="promptcoach.web.intro.v1";
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const load=(k,f)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):f}catch(e){return f}};
@@ -61,18 +61,18 @@ function pagesFromNote(note){
 }
 function siteMap(pages){
   const kids=id=>pages.filter(p=>p.parent===id), linked=new Set(pages.flatMap(p=>p.sections.map(x=>x.to)).filter(Boolean));
-  const node=p=>`<li><div class="sm-page"><span class="sm-node${p.inNav?"":" off"}">${esc(p.name)}${p.inNav?"":"<small>not in menu</small>"}</span><button type="button" class="btn sm sm-show" data-wf="${esc(p.id)}" aria-label="Show the ${esc(p.name)} wireframe">Show wireframe</button></div>${kids(p.id).length?`<ul>${kids(p.id).map(node).join("")}</ul>`:""}</li>`;
+  const node=p=>`<li><button type="button" class="sm-node${p.inNav?"":" off"}" data-wf="${esc(p.id)}" title="Go to the ${esc(p.name)} wireframe">${esc(p.name)}${p.inNav?"":"<small>not in menu</small>"}</button>${kids(p.id).length?`<ul>${kids(p.id).map(node).join("")}</ul>`:""}</li>`;
   const lost=pages.filter(p=>!p.inNav&&!p.parent&&!linked.has(p.id)), them=lost.length>1?"them":"it";
   return`<div class="sitemap"><ul class="tree"><li><span class="sm-root">${esc(state.spec.app_name||"Website")}</span><ul>${kids(null).map(node).join("")}</ul></li></ul>`
     +(lost.length?`<p class="warn">Visitors can't reach ${lost.map(p=>esc(p.name)).join(", ")}. Add ${them} to the menu or link to ${them} from another page.</p>`:"")+`</div>`;
 }
 const SKETCH={hero:"<i></i><i></i>",cards:"<i></i><i></i><i></i>",gallery:"<i></i>".repeat(6),form:"<i></i><i></i><i></i>"};
-/* Links and menu items inside a wireframe open the page they lead to. */
+/* Links and menu items inside a wireframe jump to the wireframe of the page they lead to. */
 function wireframe(p,pages){
   const nav=pages.filter(q=>q.inNav&&!q.parent), byId=new Map(pages.map(q=>[q.id,q]));
   const secs=p.sections.map(x=>{const t=SEC_TYPES.includes(x.type)?x.type:"text", to=byId.get(x.to);
     return`<div class="wf-sec t-${t}"><span class="wf-type">${esc(x.type||"section")}</span>${SKETCH[t]?`<div class="sk sk-${t}">${SKETCH[t]}</div>`:""}${x.content?`<span>${esc(x.content)}</span>`:""}${to?`<button type="button" class="wf-link" data-wf="${esc(to.id)}">→ ${esc(to.name)}</button>`:""}</div>`}).join("");
-  return`<div class="wf"><div class="wf-bar">${esc(p.name)}</div>${nav.length?`<div class="wf-nav">${nav.map(q=>`<button type="button" data-wf="${esc(q.id)}"${q===p||q.id===p.parent?' class="on"':""}>${esc(q.name)}</button>`).join("")}</div>`:""}<div class="wf-body">${secs||`<span class="none">No sections yet</span>`}</div></div>`;
+  return`<div class="wf" data-page="${esc(p.id)}"><div class="wf-bar">${esc(p.name)}</div>${nav.length?`<div class="wf-nav">${nav.map(q=>`<button type="button" data-wf="${esc(q.id)}"${q===p||q.id===p.parent?' class="on"':""}>${esc(q.name)}</button>`).join("")}</div>`:""}<div class="wf-body">${secs||`<span class="none">Sections appear here as you tell the coach what goes on this page.</span>`}</div></div>`;
 }
 function hasContent(id){return sectionData(id).some(v=>Array.isArray(v)?v.length:!!(v&&String(v).trim()))}
 const sig=id=>JSON.stringify(sectionData(id));
@@ -163,21 +163,12 @@ function renderNotice(){
   else n.hidden=true;
 }
 function renderWireframes(){
-  const pg=pagesOf(state.spec);
-  $("siteMap").innerHTML=pg.length?siteMap(pg):`<p class="placeholder">No pages yet. When you tell the coach which pages your website needs, the site map appears here and you can open a wireframe of each page.</p>`;
-  if(wfOpen){const p=pg.find(x=>x.id===wfOpen); if(p)fillWf(p,pg);else closeWf()}
+  /* Every website starts with a home page, so show one until the coach has the real pages. */
+  let pg=pagesOf(state.spec); if(!pg.length)pg=[{id:"home",name:"Home",parent:null,inNav:true,sections:[]}];
+  $("siteMap").innerHTML=siteMap(pg)+`<div class="k">Wireframes</div><div class="wfs">${pg.map(p=>wireframe(p,pg)).join("")}</div>`;
 }
 function renderAll(){renderProgress();renderLog();renderSections();renderWireframes();renderNotice()}
 
-/* ---------- wireframe pop-up ---------- */
-let wfOpen=null, wfFrom=null;
-function fillWf(p,pg){$("wfPopTitle").textContent=p.name;$("wfPopBody").innerHTML=wireframe(p,pg)}
-function openWf(id){
-  const pg=pagesOf(state.spec), p=pg.find(x=>x.id===id); if(!p)return;
-  if(!wfOpen)wfFrom=document.activeElement;
-  wfOpen=id; fillWf(p,pg); $("wfPop").hidden=false; $("wfClose").focus();
-}
-function closeWf(){wfOpen=null;$("wfPop").hidden=true;if(wfFrom&&wfFrom.isConnected)wfFrom.focus();wfFrom=null}
 
 /* ---------- interview ---------- */
 function send(text){
@@ -330,7 +321,22 @@ $("gReset").onclick=()=>{draft=DEFAULT_TOPICS.map(t=>({...t}));renderGuide()};
 $("gSave").onclick=()=>{topics=draft.filter(t=>t.label.trim()).map(t=>({...t,label:t.label.trim(),hint:t.hint.trim()||t.label.trim()}));if(!topics.length)topics=DEFAULT_TOPICS.map(t=>({...t}));save(KEY_G,topics);
   if(!topics.some(t=>t.id===state.current))state.current=(topics.find(t=>!state.covered.includes(t.id))||{}).id||null;persist();$("guide").hidden=true;renderAll()};
 $("guide").addEventListener("click",e=>{if(e.target.id==="guide")$("guide").hidden=true});
-document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if(!$("wfPop").hidden)closeWf();else if(!$("guide").hidden)$("guide").hidden=true});
+document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if(!$("intro").hidden)closeIntro();else if(!$("guide").hidden)$("guide").hidden=true});
+
+/* ---------- intro: shown on the first visit, and from "How it works" ---------- */
+let introStep=0;
+function showIntro(i){
+  const pages=document.querySelectorAll(".intro-page"), last=i===pages.length-1; introStep=i;
+  pages.forEach((p,k)=>p.hidden=k!==i);
+  document.querySelectorAll("#introDots i").forEach((d,k)=>d.classList.toggle("on",k===i));
+  $("introBack").hidden=i===0; $("introSkip").hidden=last; $("introNext").textContent=last?"Get started":"Next"; $("introNext").focus();
+}
+function openIntro(){$("intro").hidden=false;showIntro(0)}
+function closeIntro(){$("intro").hidden=true;save(KEY_I,true);$("msg").focus()}
+$("introBtn").onclick=openIntro; $("introSkip").onclick=closeIntro;
+$("introNext").onclick=()=>introStep<document.querySelectorAll(".intro-page").length-1?showIntro(introStep+1):closeIntro();
+$("introBack").onclick=()=>showIntro(introStep-1);
+$("intro").addEventListener("click",e=>{if(e.target.id==="intro")closeIntro()});
 
 /* ---------- wiring ---------- */
 function setView(v){$("app").dataset.view=v;$("tabChat").setAttribute("aria-selected",v==="chat");$("tabBp").setAttribute("aria-selected",v==="bp")}
@@ -343,9 +349,8 @@ function setPane(v){
 }
 $("paneSwitch").addEventListener("click",e=>{const b=e.target.closest("button[data-pane]");if(b)setPane(b.dataset.pane)});
 $("sections").addEventListener("click",e=>{if(e.target.closest("[data-pane-go]"))setPane("wf")});
-$("siteMap").addEventListener("click",e=>{const b=e.target.closest("[data-wf]");if(b)openWf(b.dataset.wf)});
-$("wfPop").addEventListener("click",e=>{if(e.target.id==="wfPop")return closeWf();const b=e.target.closest("[data-wf]");if(b)openWf(b.dataset.wf)});
-$("wfClose").onclick=closeWf;
+$("siteMap").addEventListener("click",e=>{const b=e.target.closest("[data-wf]"), w=b&&[...document.querySelectorAll(".wf")].find(x=>x.dataset.page===b.dataset.wf); if(!w)return;
+  w.scrollIntoView({block:"nearest",behavior:"smooth"}); w.classList.add("flash"); setTimeout(()=>w.classList.remove("flash"),1200)});
 $("composer").addEventListener("submit",e=>{e.preventDefault();send($("msg").value)});
 function autoGrow(){const m=$("msg");m.style.height="auto";m.style.height=Math.min(m.scrollHeight,160)+"px"}
 $("msg").addEventListener("input",autoGrow);
@@ -354,6 +359,7 @@ $("newBtn").onclick=()=>{if(busy&&ctl)ctl.abort();state=fresh();lastErr=null;per
 $("genBtn").onclick=generate; $("stopBtn").onclick=()=>ctl&&ctl.abort(); $("copyBtn").onclick=copy;
 
 renderAll();
+if(!load(KEY_I,false))openIntro();
 (async()=>{
   try{sample=window.claude&&window.claude.use?await window.claude.use("sample"):null}catch(e){sample=null}
   aiMode=sample?"ai":"scripted"; renderAll();

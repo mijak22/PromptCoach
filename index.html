@@ -17,6 +17,7 @@
     <div class="prog-label" id="progLabel"></div>
   </div>
   <div class="actions">
+    <button class="btn" id="introBtn" type="button">How it works</button>
     <button class="btn" id="guideBtn" type="button">Interview guide</button>
     <button class="btn" id="newBtn" type="button">New session</button>
   </div>
@@ -39,21 +40,21 @@
 
   <section class="col blueprint" aria-label="Blueprint and wireframes">
     <div class="pane-bar">
-      <div class="switch" id="paneSwitch" data-pane="bp" role="group" aria-label="Show">
-        <button type="button" data-pane="bp" aria-pressed="true">Blueprint</button>
-        <button type="button" data-pane="wf" aria-pressed="false">Wireframes</button>
+      <div class="switch" id="paneSwitch" data-pane="wf" role="group" aria-label="Show">
+        <button type="button" data-pane="wf" aria-pressed="true">Wireframes</button>
+        <button type="button" data-pane="bp" aria-pressed="false">Blueprint</button>
       </div>
     </div>
-    <div class="bp-inner" id="paneWf" hidden>
+    <div class="bp-inner" id="paneWf">
       <div class="bp-head">
         <div>
-          <h2>Site map</h2>
-          <p>How the pages of your website connect. Open a page's wireframe to see a rough sketch of its layout, from top to bottom.</p>
+          <h2>Site map and wireframes</h2>
+          <p>How the pages of your website connect, with a rough sketch of each page from top to bottom. More pages and details appear as you talk with the coach.</p>
         </div>
       </div>
       <div id="siteMap"></div>
     </div>
-    <div class="bp-inner" id="paneBp">
+    <div class="bp-inner" id="paneBp" hidden>
       <div class="bp-head">
         <div>
           <h2 id="bpTitle">Blueprint</h2>
@@ -80,6 +81,72 @@
   </section>
 </main>
 
+<div class="overlay" id="intro" hidden>
+  <div class="dialog intro" role="dialog" aria-modal="true" aria-label="How PromptCoach works">
+    <section class="intro-page">
+      <div class="intro-art" aria-hidden="true">
+        <div class="msg coach"><span class="who">Coach</span>What should your website help your visitors with?</div>
+        <div class="msg user">Booking a haircut online</div>
+        <div class="art-opts"><span class="opt">Showing prices</span><span class="opt">A contact form</span></div>
+      </div>
+      <div class="intro-text">
+        <div class="k">Step 1 of 4</div>
+        <h2>Chat with the coach</h2>
+        <p>The coach asks you about your website, one question at a time.</p>
+        <p>Answer in your own words, or tap a suggestion to answer quickly.</p>
+      </div>
+    </section>
+    <section class="intro-page" hidden>
+      <div class="intro-art" aria-hidden="true">
+        <ul class="tree"><li><span class="sm-root">My salon</span><ul><li><span class="sm-node">Home</span></li><li><span class="sm-node">Booking</span></li></ul></li></ul>
+        <div class="wf"><div class="wf-bar">Home</div><div class="wf-body"><div class="wf-sec t-hero"><span class="wf-type">hero</span><div class="sk sk-hero"><i></i><i></i></div></div><div class="wf-sec t-cards"><span class="wf-type">cards</span><div class="sk sk-cards"><i></i><i></i><i></i></div></div></div></div>
+      </div>
+      <div class="intro-text">
+        <div class="k">Step 2 of 4</div>
+        <h2>Watch your pages take shape</h2>
+        <p>In the Wireframes view, the site map shows your website's pages and how they connect. Each wireframe is a rough sketch of one page.</p>
+        <p>You start with just a home page. More pages and details appear as you talk.</p>
+      </div>
+    </section>
+    <section class="intro-page" hidden>
+      <div class="intro-art" aria-hidden="true">
+        <article class="sec confirmed"><div class="sec-h"><h3>Visitors</h3><span class="pill ok">Confirmed</span></div><div class="person"><b>Locals</b><span>Want to book a haircut fast</span></div></article>
+        <article class="sec"><div class="sec-h"><h3>Pages</h3><span class="pill cov">Covered, please check</span></div><div style="display:flex;gap:8px"><span class="btn sm primary">Looks right</span><span class="btn sm">Change</span></div></article>
+      </div>
+      <div class="intro-text">
+        <div class="k">Step 3 of 4</div>
+        <h2>Check your blueprint</h2>
+        <p>Switch to Blueprint to see everything the coach has written down.</p>
+        <p>Tap Looks right on each part, or Change to correct it.</p>
+      </div>
+    </section>
+    <section class="intro-page" hidden>
+      <div class="intro-art" aria-hidden="true">
+        <div class="prompt-box">
+          <h3>Your build prompt</h3>
+          <div class="prompt-row"><span class="k">Write it for</span><span class="art-select">Lovable</span><span class="btn primary">Generate prompt</span></div>
+          <pre class="out">Build a responsive website for a hair salon called My salon. Pages: Home, Booking…</pre>
+          <span class="btn sm" style="align-self:flex-start">Copy</span>
+        </div>
+      </div>
+      <div class="intro-text">
+        <div class="k">Step 4 of 4</div>
+        <h2>Generate your prompt</h2>
+        <p>When your blueprint looks right, choose the tool you build with, like Lovable or Bolt, and tap Generate prompt.</p>
+        <p>Copy the prompt and paste it into that tool to build your website.</p>
+      </div>
+    </section>
+    <div class="intro-foot">
+      <div class="dots" id="introDots" aria-hidden="true"><i class="on"></i><i></i><i></i><i></i></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn" id="introSkip" type="button">Skip</button>
+        <button class="btn" id="introBack" type="button" hidden>Back</button>
+        <button class="btn primary" id="introNext" type="button">Next</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="guide" hidden>
   <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="guideTitle">
     <h2 id="guideTitle">Interview guide</h2>
@@ -91,16 +158,6 @@
     </div>
   </div>
 </div>
-<div class="overlay" id="wfPop" hidden>
-  <div class="dialog wf-dialog" role="dialog" aria-modal="true" aria-labelledby="wfPopTitle">
-    <div class="wf-dialog-h">
-      <div><div class="k">Wireframe</div><h2 id="wfPopTitle"></h2></div>
-      <button class="btn sm" id="wfClose" type="button">Close</button>
-    </div>
-    <div id="wfPopBody"></div>
-  </div>
-</div>
-
 <script src="js/config.js"></script>
 <script src="js/app.js"></script>
 </body>

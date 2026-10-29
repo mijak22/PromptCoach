@@ -9,7 +9,7 @@ const DEFAULT_TOPICS=[
  {id:"features",label:"What visitors can do",hint:"What should visitors be able to do on the site, like contact you, book a time, sign up or buy? Which are must-haves?"},
  {id:"flow",label:"The main layout",hint:"What should the primary layout of the website look like? If you forget the content of the pages, do you have any requirements for the top and bottom?"},
  {id:"pages",label:"Pages",hint:"Which pages should the site have, which belong in the main menu?"},
- {id:"screens",label:"Screens layout",hint:"What should each page looks like? Go through them from top to bottom."},
+ {id:"screens",label:"Screens layout",hint:"What should each page looks like? Go through them from top to bottom. You can start with the homepage."},
  {id:"data",label:"Information shown or collected",hint:"What information does the site show or collect, like opening hours, prices, or the fields in a contact form?"},
  {id:"look",label:"Look and feel",hint:"How should it look and feel? Any colours, logo, mood or websites you like the style of?"},
  {id:"platform",label:"Practical details",hint:"Which languages should it be in?"},

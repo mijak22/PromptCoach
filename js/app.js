@@ -22,8 +22,9 @@ function sectionData(id){
     case"idea":return[s.app_name,s.one_liner,s.problem,n];
     case"users":return[arr(s.users),n];
     case"features":return[arr(s.features),n];
-    case"flow":return[arr(s.flow),n];
-    case"screens":return[pagesOf(s),n];
+    case"flow":{const l=s.layout||{};return[l.top,l.bottom,l.other,arr(s.flow),n]}
+    case"pages":return[pagesOf(s).map(p=>({name:p.name,parent:p.parent,inNav:p.inNav})),n];
+    case"screens":return[pagesOf(s).filter(p=>p.sections.length).map(p=>({name:p.name,sections:p.sections})),n];
     case"data":return[arr(s.data),n];
     case"look":return[s.style,n];
     case"platform":return[s.platform,arr(s.constraints),n];
@@ -31,14 +32,15 @@ function sectionData(id){
     default:return[n];
   }
 }
-/* Pages: a tree (parent) with sections top to bottom. Older sessions only have flat "screens". */
+/* Pages: a tree (parent) with sections top to bottom. The "pages" topic fills the tree, "screens" the sections.
+   Older sessions only have flat "screens". */
 const SEC_TYPES=["hero","text","cards","gallery","form","testimonials","map","cta","faq","footer"];
 function pagesOf(s){
   let pages=arr(s.pages).filter(p=>p&&p.name).map((p,i)=>({id:String(p.id||"p"+i),name:String(p.name),parent:p.parent?String(p.parent):null,inNav:p.inNav!==false,
     sections:arr(p.sections).map(x=>typeof x==="string"?{type:"text",content:x}:x).filter(x=>x&&typeof x==="object")}));
   if(!pages.length)pages=arr(s.screens).filter(x=>x&&x.name).map((x,i)=>{const c=Array.isArray(x.contents)?x.contents:String(x.contents||"").split(/[,;\n]/).map(t=>t.trim()).filter(Boolean);
     return{id:"s"+i,name:String(x.name),parent:null,inNav:true,sections:c.map(t=>({type:"text",content:String(t)}))}});
-  if(!pages.length)pages=pagesFromNote((s.notes||{}).screens);
+  if(!pages.length)pages=notePages(s.notes||{});
   const byId=new Map(pages.map(p=>[p.id,p]));
   pages.forEach(p=>{const seen=new Set();let q=p;while(q&&q.parent){if(seen.has(q.id)||!byId.has(q.parent)){p.parent=null;break}seen.add(q.id);q=byId.get(q.parent)}});
   return pages;
@@ -59,6 +61,14 @@ function pagesFromNote(note){
   }));
   return out;
 }
+/* Scripted mode: page names come from the Pages answer, and "Name: content" lines in the Screens layout answer
+   are added to the matching page. Without a Pages answer, the Screens layout answer is used on its own. */
+function notePages(n){
+  const pages=pagesFromNote(n.pages), lay=pagesFromNote(n.screens);
+  if(!pages.length)return lay;
+  lay.forEach(l=>{const p=pages.find(x=>x.name.toLowerCase()===l.name.toLowerCase());if(p)p.sections.push(...l.sections)});
+  return pages;
+}
 function siteMap(pages){
   const kids=id=>pages.filter(p=>p.parent===id), linked=new Set(pages.flatMap(p=>p.sections.map(x=>x.to)).filter(Boolean));
   const node=p=>`<li><button type="button" class="sm-node${p.inNav?"":" off"}" data-wf="${esc(p.id)}" title="Go to the ${esc(p.name)} wireframe">${esc(p.name)}${p.inNav?"":"<small>not in menu</small>"}</button>${kids(p.id).length?`<ul>${kids(p.id).map(node).join("")}</ul>`:""}</li>`;
@@ -69,10 +79,11 @@ function siteMap(pages){
 const SKETCH={hero:"<i></i><i></i>",cards:"<i></i><i></i><i></i>",gallery:"<i></i>".repeat(6),form:"<i></i><i></i><i></i>"};
 /* Links and menu items inside a wireframe jump to the wireframe of the page they lead to. */
 function wireframe(p,pages){
-  const nav=pages.filter(q=>q.inNav&&!q.parent), byId=new Map(pages.map(q=>[q.id,q]));
+  const nav=pages.filter(q=>q.inNav&&!q.parent), byId=new Map(pages.map(q=>[q.id,q])), lay=state.spec.layout||{};
+  const frame=(t,x)=>x?`<div class="wf-frame"><span class="wf-type">${t}</span><span>${esc(x)}</span></div>`:"";
   const secs=p.sections.map(x=>{const t=SEC_TYPES.includes(x.type)?x.type:"text", to=byId.get(x.to);
     return`<div class="wf-sec t-${t}"><span class="wf-type">${esc(x.type||"section")}</span>${SKETCH[t]?`<div class="sk sk-${t}">${SKETCH[t]}</div>`:""}${x.content?`<span>${esc(x.content)}</span>`:""}${to?`<button type="button" class="wf-link" data-wf="${esc(to.id)}">→ ${esc(to.name)}</button>`:""}</div>`}).join("");
-  return`<div class="wf" data-page="${esc(p.id)}"><div class="wf-bar">${esc(p.name)}</div>${nav.length?`<div class="wf-nav">${nav.map(q=>`<button type="button" data-wf="${esc(q.id)}"${q===p||q.id===p.parent?' class="on"':""}>${esc(q.name)}</button>`).join("")}</div>`:""}<div class="wf-body">${secs||`<span class="none">Sections appear here as you tell the coach what goes on this page.</span>`}</div></div>`;
+  return`<div class="wf" data-page="${esc(p.id)}"><div class="wf-bar">${esc(p.name)}</div>${nav.length?`<div class="wf-nav">${nav.map(q=>`<button type="button" data-wf="${esc(q.id)}"${q===p||q.id===p.parent?' class="on"':""}>${esc(q.name)}</button>`).join("")}</div>`:""}${frame("top of every page",lay.top)}<div class="wf-body">${secs||`<span class="none">Sections appear here as you tell the coach what goes on this page.</span>`}</div>${frame("bottom of every page",lay.bottom)}</div>`;
 }
 function hasContent(id){return sectionData(id).some(v=>Array.isArray(v)?v.length:!!(v&&String(v).trim()))}
 const sig=id=>JSON.stringify(sectionData(id));
@@ -114,11 +125,15 @@ function body(id){
     case"features":
       if(arr(s.features).length){const col=(p,t)=>{const f=arr(s.features).filter(x=>(x.priority||"must").toLowerCase()===p);return`<div class="mcol ${p}"><h4>${t}</h4>${f.length?f.map(x=>`<div class="feat"><b>${esc(x.name)}</b>${x.detail?`<span>${esc(x.detail)}</span>`:""}</div>`).join(""):`<span class="none">Nothing yet</span>`}</div>`};
         h.push(`<div class="moscow">${col("must","Must have")}${col("should","Should have")}${col("could","Could have")}</div>`)}break;
-    case"flow":
-      if(arr(s.flow).length)h.push(`<ol class="flow">${arr(s.flow).map(x=>`<li><span class="box">${esc(x)}</span></li>`).join("")}</ol>`);break;
-    case"screens":{const pg=pagesOf(s), nm=id=>(pg.find(p=>p.id===id)||{}).name;
-      if(pg.length)h.push(`<ul class="pagelist">${pg.map(p=>`<li><b>${esc(p.name)}</b>${p.parent?`<small>under ${esc(nm(p.parent))}</small>`:""}${p.inNav?"":"<small>not in menu</small>"}${p.sections.length?`<span>${p.sections.map(x=>esc(x.type||"section")).join(" · ")}</span>`:""}</li>`).join("")}</ul>`,
-        `<button type="button" class="btn sm" data-pane-go="wf" style="align-self:flex-start">See site map and wireframes</button>`);break}
+    case"flow":{const l=s.layout||{};
+      [["Top of every page",l.top],["Bottom of every page",l.bottom],["Other layout rules",l.other]].forEach(([k,v])=>{if(v)h.push(`<div><div class="k">${k}</div><p>${esc(v)}</p></div>`)});
+      if(arr(s.flow).length)h.push(`<ol class="flow">${arr(s.flow).map(x=>`<li><span class="box">${esc(x)}</span></li>`).join("")}</ol>`);break}
+    case"pages":{const pg=pagesOf(s), nm=id=>(pg.find(p=>p.id===id)||{}).name;
+      if(pg.length)h.push(`<ul class="pagelist">${pg.map(p=>`<li><b>${esc(p.name)}</b>${p.parent?`<small>under ${esc(nm(p.parent))}</small>`:""}${p.inNav?"<small>in menu</small>":"<small>not in menu</small>"}</li>`).join("")}</ul>`,
+        `<button type="button" class="btn sm" data-pane-go="wf" style="align-self:flex-start">See site map</button>`);break}
+    case"screens":{const pg=pagesOf(s).filter(p=>p.sections.length);
+      if(pg.length)h.push(`<ul class="pagelist">${pg.map(p=>`<li><b>${esc(p.name)}</b><span>${p.sections.map(x=>esc(x.type||"section")).join(" · ")}</span></li>`).join("")}</ul>`,
+        `<button type="button" class="btn sm" data-pane-go="wf" style="align-self:flex-start">See wireframes</button>`);break}
     case"data":
       if(arr(s.data).length)h.push(`<div class="entities">${arr(s.data).map(x=>`<div class="entity"><b>${esc(x.entity)}</b><ul>${arr(x.fields).map(f=>`<li>${esc(f)}</li>`).join("")}</ul></div>`).join("")}</div>`);break;
     case"look":if(s.style)h.push(`<p>${esc(s.style)}</p>`);break;
@@ -176,7 +191,7 @@ function send(text){
   state.messages.push({role:"user",text}); state.options=[]; lastErr=null; $("msg").value=""; autoGrow();
   persist(); coachTurn();
 }
-const SCHEMA=`{"app_name":"","one_liner":"","problem":"","users":[{"name":"","need":""}],"features":[{"name":"","detail":"","priority":"must|should|could"}],"flow":["step"],"pages":[{"id":"home","name":"","parent":null,"inNav":true,"sections":[{"type":"${SEC_TYPES.join("|")}","content":"","to":"<page id, or omit>"}]}],"data":[{"entity":"","fields":["field"]}],"style":"","platform":"","constraints":[""],"success":[""],"notes":{"<topic id>":"summary"}}`;
+const SCHEMA=`{"app_name":"","one_liner":"","problem":"","users":[{"name":"","need":""}],"features":[{"name":"","detail":"","priority":"must|should|could"}],"layout":{"top":"","bottom":"","other":""},"pages":[{"id":"home","name":"","parent":null,"inNav":true,"sections":[{"type":"${SEC_TYPES.join("|")}","content":"","to":"<page id, or omit>"}]}],"data":[{"entity":"","fields":["field"]}],"style":"","platform":"","constraints":[""],"success":[""],"notes":{"<topic id>":"summary"}}`;
 function coachPrompt(){
   const guide=topics.map(t=>`- id "${t.id}" — ${t.label}: ${t.hint}${state.covered.includes(t.id)?" [COVERED]":""}`).join("\n");
   const convo=state.messages.slice(-12).map(m=>(m.role==="coach"?"COACH: ":"USER: ")+m.text).join("\n");
@@ -196,7 +211,7 @@ How to interview:
 Interview guide (topic id, name, what to learn):
 ${guide}
 
-How topics map to the blueprint: idea → app_name, one_liner, problem; users → users; features → features (priority must/should/could, default must); flow → flow (ordered steps); screens → pages (id: short lowercase slug; parent: id of the page it sits under, or null; inNav: true if it is in the main menu; sections: top to bottom, each with a type, a few words of content, and "to" = page id when a button or link in it leads to another page); data → data; look → style; platform → platform (languages and other practical details) and constraints (must have / must not have); success → success (testable checks).${customs.length?` Topics ${customs.map(c=>`"${c}"`).join(", ")} → notes["<id>"] as a short summary.`:""} Write blueprint entries in short plain phrases, from the user's answers only.
+How topics map to the blueprint: idea → app_name, one_liner, problem; users → users; features → features (priority must/should/could, default must); flow → layout (top: what is at the top of every page, like logo and menu; bottom: what is at the bottom of every page, like contact details; other: any other rule for all pages); pages → pages (id: short lowercase slug; name; parent: id of the page it sits under, or null; inNav: true if it is in the main menu); screens → the "sections" of each page in pages (top to bottom, each with a type, a few words of content, and "to" = page id when a button or link in it leads to another page; add a page if the user describes one that is not in the list yet). "pages" is one list holding both: whenever you change it, send the whole list with every page's existing sections. data → data; look → style; platform → platform (languages and other practical details) and constraints (must have / must not have); success → success (testable checks).${customs.length?` Topics ${customs.map(c=>`"${c}"`).join(", ")} → notes["<id>"] as a short summary.`:""} Write blueprint entries in short plain phrases, from the user's answers only.
 
 Current blueprint JSON:
 ${JSON.stringify(state.spec)}
@@ -260,10 +275,13 @@ function localPrompt(target){
   L.push(`Build a responsive website for me${target!=="Any AI code generator"?` in ${target}`:""}. It must work well on phones, tablets and computers. Follow these requirements exactly and don't add features I haven't listed. Use clearly marked placeholder text and images where content is missing.`,"");
   topics.forEach(t=>{if(!hasContent(t.id))return;
     L.push(`## ${t.label}${isConfirmed(t.id)?"":" (not yet confirmed)"}`);
-    if(t.id==="screens"){const pg=pagesOf(s), nm=id=>(pg.find(p=>p.id===id)||{}).name;
-      pg.forEach(p=>{L.push(`- ${p.name}${p.parent?` (under ${nm(p.parent)})`:""}${p.inNav?"":" (not in the main menu)"}`);
+    const n=(s.notes||{})[t.id], pg=pagesOf(s), nm=id=>(pg.find(p=>p.id===id)||{}).name;
+    if(t.id==="pages"){pg.forEach(p=>L.push(`- ${p.name}${p.parent?` (under ${nm(p.parent)})`:""}${p.inNav?"":" (not in the main menu)"}`));if(n)L.push(`- ${n}`);L.push("");return}
+    if(t.id==="screens"){pg.filter(p=>p.sections.length).forEach(p=>{L.push(`- ${p.name}`);
         p.sections.forEach(x=>L.push(`  - ${x.type||"section"}${x.content?": "+x.content:""}${nm(x.to)?` (links to ${nm(x.to)})`:""}`))});
-      const n=(s.notes||{}).screens; if(n)L.push(`- ${n}`); L.push(""); return}
+      if(n)L.push(`- ${n}`); L.push(""); return}
+    if(t.id==="flow"){const l=s.layout||{};[["Top of every page",l.top],["Bottom of every page",l.bottom],["Other layout rules",l.other]].forEach(([k,v])=>{if(v)L.push(`- ${k}: ${v}`)});
+      arr(s.flow).forEach(x=>L.push(`- ${x}`)); if(n)L.push(`- ${n}`); L.push(""); return}
     const d=sectionData(t.id).flat().filter(Boolean).map(v=>typeof v==="object"?Object.values(v).flat().filter(Boolean).join(" — "):v);
     d.forEach(v=>L.push(`- ${v}`)); L.push("");});
   L.push("## Build order","- Start with a first version that covers only the must-have features, then stop so I can test it before adding more.");
@@ -277,7 +295,7 @@ async function generate(){
   $("out").hidden=false; $("out").textContent="Writing your prompt…"; $("copyBtn").hidden=true;
   const p=`Write a build prompt that a non-technical person will paste into ${target==="Any AI code generator"?"a vibe-coding tool":target} to create their WEBSITE. The reader of the prompt is the AI tool, so use precise web terms it understands well (pages, sections, navigation, hero, call to action, responsive layout, form fields and validation), even though the person who gave the requirements is not technical.
 
-Write clear, direct instructions. Use these markdown headings in this order: Overview, Target visitors, Site map and navigation, Pages (each page with its sections in order, top to bottom), Features (with sub-lists Must have / Should have / Could have), Visitor journey (numbered steps), Content and forms (information shown, form fields), Design (colours, typography mood, imagery, tone of voice), Technical requirements (responsive for phone/tablet/desktop, accessible, fast, SEO basics with page titles and descriptions, plus any limits given), Acceptance criteria (a checklist the user can test), Build order (first version = must-haves only, then pause for review). Where real text or images are not provided, ask the tool to use clearly marked placeholder content.
+Write clear, direct instructions. Use these markdown headings in this order: Overview, Target visitors, Site map and navigation, Pages (each page with its sections in order, top to bottom), Features (with sub-lists Must have / Should have / Could have), Layout on every page (header, footer and other shared parts), Content and forms (information shown, form fields), Design (colours, typography mood, imagery, tone of voice), Technical requirements (responsive for phone/tablet/desktop, accessible, fast, SEO basics with page titles and descriptions, plus any limits given), Acceptance criteria (a checklist the user can test), Build order (first version = must-haves only, then pause for review). Where real text or images are not provided, ask the tool to use clearly marked placeholder content.
 Use ONLY the requirements below. Do not invent features. If something needed is missing, pick the simplest sensible default and mark it "(assumption)". Sections whose status is UNCONFIRMED: include them, but end each such item with "(not yet confirmed)".${target!=="Any AI code generator"?` Phrase it in the way that works best for ${target}.`:""}
 Reply with only the prompt text, nothing before or after it.
 

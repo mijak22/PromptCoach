@@ -156,6 +156,9 @@ h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0}
 .wf-nav button{border:0;background:none;padding:0;font-size:inherit;color:inherit}
 .wf-nav button:hover,.wf-link:hover{text-decoration:underline;text-underline-offset:3px}
 .wf-nav .on{color:var(--accent);font-weight:700;text-decoration:underline;text-underline-offset:3px}
+.wf-frame{display:flex;flex-direction:column;gap:2px;padding:5px 10px;background:var(--surface-2);font-size:11.5px;color:var(--muted);overflow-wrap:anywhere}
+.wf-frame:last-child{border-top:1px solid var(--line)}
+.wf-nav+.wf-frame,.wf-bar+.wf-frame{border-bottom:1px solid var(--line)}
 .wf-body{padding:8px;display:flex;flex-direction:column;gap:6px}
 .wf-sec{border:1px dashed var(--line);border-radius:6px;padding:6px 8px;display:flex;flex-direction:column;gap:4px;font-size:12.5px;min-width:0;overflow-wrap:anywhere}
 .wf-sec.t-hero{background:var(--surface-2);padding-block:12px}

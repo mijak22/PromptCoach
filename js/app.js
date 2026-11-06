@@ -83,7 +83,7 @@ function wireframe(p,pages){
   const frame=(t,x)=>x?`<div class="wf-frame"><span class="wf-type">${t}</span><span>${esc(x)}</span></div>`:"";
   const secs=p.sections.map(x=>{const t=SEC_TYPES.includes(x.type)?x.type:"text", to=byId.get(x.to);
     return`<div class="wf-sec t-${t}"><span class="wf-type">${esc(x.type||"section")}</span>${SKETCH[t]?`<div class="sk sk-${t}">${SKETCH[t]}</div>`:""}${x.content?`<span>${esc(x.content)}</span>`:""}${to?`<button type="button" class="wf-link" data-wf="${esc(to.id)}">→ ${esc(to.name)}</button>`:""}</div>`}).join("");
-  return`<div class="wf" data-page="${esc(p.id)}"><div class="wf-bar">${esc(p.name)}</div>${nav.length?`<div class="wf-nav">${nav.map(q=>`<button type="button" data-wf="${esc(q.id)}"${q===p||q.id===p.parent?' class="on"':""}>${esc(q.name)}</button>`).join("")}</div>`:""}${frame("top of every page",lay.top)}<div class="wf-body">${secs||`<span class="none">Sections appear here as you tell the coach what goes on this page.</span>`}</div>${frame("bottom of every page",lay.bottom)}</div>`;
+  return`<div class="wf" data-page="${esc(p.id)}"><div class="wf-bar"><span class="wf-url">${esc(p.name)}</span></div>${nav.length?`<div class="wf-nav">${nav.map(q=>`<button type="button" data-wf="${esc(q.id)}"${q===p||q.id===p.parent?' class="on"':""}>${esc(q.name)}</button>`).join("")}</div>`:""}${frame("top of every page",lay.top)}<div class="wf-body">${secs||`<span class="none">Sections appear here as you tell the coach what goes on this page.</span>`}</div>${frame("bottom of every page",lay.bottom)}</div>`;
 }
 function hasContent(id){return sectionData(id).some(v=>Array.isArray(v)?v.length:!!(v&&String(v).trim()))}
 const sig=id=>JSON.stringify(sectionData(id));

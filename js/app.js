@@ -326,14 +326,34 @@ async function copy(){
 
 /* ---------- build the website with Claude ---------- */
 /* The site is one self-contained HTML file shown in a sandboxed frame that fills the window. */
+/* The frame has no address of its own, so "#about" or "about.html" would load PromptCoach into it.
+   This script keeps every link inside the site: it turns them into "#page-id" and shows that page. */
+const ROUTER=`<script>(function(){
+var slug=function(h){h=String(h||"").split("?")[0];var f=h.indexOf("#")>=0?h.split("#").pop():h.split("/").pop().replace(/\\.html?$/i,"");f=decodeURIComponent(f).toLowerCase();return f==="index"||f===""?"home":f};
+var pages=function(){return[].slice.call(document.querySelectorAll("[data-page]"))};
+function show(id){var ps=pages(),t=document.getElementById(id)||document.querySelector('[data-page="'+id+'"]');
+ if(ps.length){var pg=t&&(t.closest("[data-page]")||t);if(!pg&&id==="home")pg=ps[0];if(pg){ps.forEach(function(p){p.hidden=p!==pg});
+  [].forEach.call(document.querySelectorAll("[data-nav]"),function(a){var on=a.getAttribute("data-nav")===pg.getAttribute("data-page");a.classList.toggle("active",on);if(on)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")})}}
+ if(t&&t.getAttribute("data-page")==null)t.scrollIntoView({behavior:"smooth"});else window.scrollTo(0,0)}
+document.addEventListener("click",function(e){var a=e.target.closest&&e.target.closest("a[href],[data-nav]");if(!a)return;
+ var h=a.getAttribute("data-nav")||a.getAttribute("href")||"";
+ if(/^(https?:|mailto:|tel:|javascript:)/i.test(h)){if(!/^javascript:/i.test(h))e.preventDefault();return}
+ e.preventDefault();var id=a.hasAttribute("data-nav")?h:slug(h);
+ if(location.hash.slice(1)!==id)location.hash=id;else show(id)},true);
+window.addEventListener("hashchange",function(){show(location.hash.slice(1)||"home")});
+window.addEventListener("submit",function(e){if(!e.defaultPrevented)e.preventDefault()});
+document.addEventListener("DOMContentLoaded",function(){show(location.hash.slice(1)||"home")});
+})();<\/script>`;
+function withRouter(html){const i=html.search(/<\/body>/i);return i<0?html+ROUTER:html.slice(0,i)+ROUTER+html.slice(i)}
 function cleanHtml(t){const s=String(t||"").replace(/^\s*```(?:html)?\s*/i,"").replace(/```\s*$/,""), i=s.search(/<!doctype html|<html/i);return(i>0?s.slice(i):s).trim()}
 function showSite(){
   const v=$("siteView"); v.hidden=false; document.body.style.overflow="hidden";
   $("siteCode").hidden=!building; $("siteFrame").hidden=building||!state.site; $("siteStop").hidden=!building;
   $("siteCopy").disabled=building||!state.site; $("siteRebuild").disabled=building;
-  if(!building&&state.site&&$("siteFrame").dataset.for!==state.site){$("siteFrame").srcdoc=state.site;$("siteFrame").dataset.for=state.site}
+  if(!building&&state.site&&$("siteFrame").dataset.for!==state.site){$("siteFrame").srcdoc=withRouter(state.site);$("siteFrame").dataset.for=state.site}
 }
 function closeSite(){if(building&&buildCtl)buildCtl.abort();$("siteView").hidden=true;document.body.style.overflow="";$("buildBtn").focus()}
+function pageList(){const pg=pagesOf(state.spec);return pg.length?`\nPages and their ids (build all of them):\n${pg.map(p=>`- ${p.name}: ${p.id}`).join("\n")}`:""}
 async function build(){
   if(building||!state.prompt||aiMode!=="ai")return;
   building=true; buildCtl=new AbortController(); renderAll(); showSite();
@@ -345,11 +365,13 @@ Reply with ONLY one complete HTML document: start with <!DOCTYPE html> and write
 Rules:
 - Everything in this one file: put CSS in a <style> tag and JavaScript in a <script> tag. Do not load any outside scripts, stylesheets or images. The only allowed outside resource is Google Fonts from fonts.googleapis.com.
 - Images: use CSS gradients, inline SVG or clearly labelled placeholder boxes. Never use image URLs.
-- If the site has several pages, put each page in its own <section> in this file and show one at a time with a small script. Menu items, links and buttons switch pages without reloading. Every page in the prompt must exist and be reachable.
+- The site is ONE file that holds EVERY page. Put each page in its own <section data-page="PAGE-ID" id="PAGE-ID">, using the page ids listed below; the first page is the home page. Only one page is shown at a time.
+- Every link or button that goes to another page is written as <a href="#PAGE-ID" data-nav="PAGE-ID">. Never link to other files (no "about.html", no "/"), never use full URLs for the site's own pages.
+- Give EVERY page its complete, styled content and sections from the build prompt, just as carefully as the home page. Don't leave any page empty or as a stub.${pageList()}
 - Forms: handle submit in the script with preventDefault(), validate the fields and show a friendly confirmation on the page. Nothing is sent anywhere. Don't use alert().
 - Make it look polished and professional, responsive on phones, tablets and computers, and accessible.
 - Use real-sounding text from the prompt; where content is missing, use short, clearly marked placeholders.
-- Keep the code compact so the whole file fits in your answer.
+- Keep the code compact (short CSS, reuse classes) so the whole file with all pages fits in your answer. Finish with </html>.
 
 Build prompt:
 ${state.prompt}`;

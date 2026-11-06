@@ -20,4 +20,4 @@ const DEFAULT_TOPICS=[
 const EXAMPLES=["A website for my hair salon with online booking","A portfolio site for my photography","A site for our local football club"];
 
 /* The coach's first message. \n = new line. */
-const WELCOME="Hi, I'm your PromptCoach. I'll ask you a few questions, one at a time, and build a blueprint of your website on the right as we go. When it's complete, I'll turn it into a clear prompt you can paste into a vibe-coding tool like Lovable or Bolt.\n\nTo start: what website would you like, and what should it help you or your visitors with?";
+const WELCOME="Hi, I'm your PromptCoach. I'll ask you a few questions, one at a time, and build a blueprint of your website on the right as we go. When it's complete, I'll turn it into a clear prompt. You can build the website with Claude right here, or paste the prompt into another tool like Lovable or Bolt.\n\nTo start: what website would you like, and what should it help you or your visitors with?";

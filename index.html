@@ -66,13 +66,10 @@
       <div class="prompt-box">
         <h3>Your build prompt</h3>
         <div class="prompt-row">
-          <label for="target" class="k">Write it for</label>
-          <select id="target">
-            <option>Any AI code generator</option><option>Lovable</option><option>Bolt</option><option>v0</option><option>Replit</option><option>Framer</option><option>Claude</option>
-          </select>
           <button class="btn primary" id="genBtn" type="button">Generate prompt</button>
           <button class="btn" id="stopBtn" type="button" hidden>Stop</button>
           <button class="btn" id="copyBtn" type="button" hidden>Copy</button>
+          <button class="btn build" id="buildBtn" type="button" disabled>Build website with Claude</button>
         </div>
         <p class="hint" id="genHint"></p>
         <pre class="out" id="out" hidden></pre>
@@ -124,16 +121,16 @@
       <div class="intro-art" aria-hidden="true">
         <div class="prompt-box">
           <h3>Your build prompt</h3>
-          <div class="prompt-row"><span class="k">Write it for</span><span class="art-select">Lovable</span><span class="btn primary">Generate prompt</span></div>
+          <div class="prompt-row"><span class="btn primary">Generate prompt</span></div>
           <pre class="out">Build a responsive website for a hair salon called My salon. Pages: Home, Booking…</pre>
-          <span class="btn sm" style="align-self:flex-start">Copy</span>
+          <div class="prompt-row"><span class="btn sm">Copy</span><span class="btn sm build">Build website with Claude</span></div>
         </div>
       </div>
       <div class="intro-text">
         <div class="k">Step 4 of 4</div>
         <h2>Generate your prompt</h2>
-        <p>When your blueprint looks right, choose the tool you build with, like Lovable or Bolt, and tap Generate prompt.</p>
-        <p>Copy the prompt and paste it into that tool to build your website.</p>
+        <p>When your blueprint looks right, tap Generate prompt.</p>
+        <p>Tap Build website with Claude to build it right here, or copy the prompt and paste it into another tool, like Lovable or Bolt.</p>
       </div>
     </section>
     <div class="intro-foot">
@@ -158,6 +155,18 @@
     </div>
   </div>
 </div>
+<div class="site-view" id="siteView" hidden>
+  <div class="site-bar">
+    <button class="btn" id="siteBack" type="button">← Back to PromptCoach</button>
+    <span class="site-status" id="siteStatus" role="status"></span>
+    <button class="btn" id="siteStop" type="button" hidden>Stop</button>
+    <button class="btn" id="siteCopy" type="button">Copy code</button>
+    <button class="btn" id="siteRebuild" type="button">Build again</button>
+  </div>
+  <pre class="site-code" id="siteCode" hidden></pre>
+  <iframe class="site-frame" id="siteFrame" title="Your website" sandbox="allow-scripts allow-forms"></iframe>
+</div>
+
 <script src="js/config.js"></script>
 <script src="js/app.js"></script>
 </body>

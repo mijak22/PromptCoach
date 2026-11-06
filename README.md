@@ -2,7 +2,8 @@
 
 An AI interview tool for non-technical people who build websites with vibe-coding tools.
 The coach interviews the user about their website idea, shows the requirements as a
-blueprint to confirm, and writes a precise prompt for tools like Lovable, Bolt or v0.
+blueprint to confirm, and writes one precise build prompt. The user can build the website
+with Claude directly in PromptCoach, or copy the prompt into tools like Lovable, Bolt or v0.
 
 ## Files
 

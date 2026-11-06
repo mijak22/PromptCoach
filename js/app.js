@@ -11,7 +11,7 @@ const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
 let topics=load(KEY_G,null)||DEFAULT_TOPICS.map(t=>({...t}));
 function fresh(){return{messages:[{role:"coach",text:WELCOME,topic:"idea"}],spec:{},covered:[],current:"idea",confirmed:{},options:[],prompt:""}}
 let state=load(KEY_S,null)||fresh();
-let sample=null, aiMode="pending", busy=false, ctl=null, lastErr=null;
+let sample=null, aiMode="pending", busy=false, ctl=null, lastErr=null, building=false, buildCtl=null;
 const persist=()=>save(KEY_S,state);
 
 /* ---------- spec helpers ---------- */
@@ -169,6 +169,10 @@ function renderSections(){
     :"Everything is confirmed. Your prompt will use exactly these requirements.";
   $("genBtn").disabled=busy||!topics.some(t=>hasContent(t.id));
   if(state.prompt){$("out").hidden=false;$("out").textContent=state.prompt;$("copyBtn").hidden=false}else{$("out").hidden=true;$("copyBtn").hidden=true}
+  const b=$("buildBtn"), built=state.site&&state.siteFor===state.prompt;
+  b.disabled=busy||building||!state.prompt||aiMode!=="ai";
+  b.textContent=built?"Open your website":"Build website with Claude";
+  b.title=aiMode==="ai"||!state.prompt?"":"Building with Claude needs Claude to be available on this page. You can still copy the prompt.";
 }
 function renderNotice(){
   const n=$("notice"), allCov=topics.every(t=>state.covered.includes(t.id));
@@ -270,9 +274,9 @@ function scriptedTurn(switched){
 
 /* ---------- prompt generation ---------- */
 function statusList(){return topics.map(t=>`${t.label}: ${!hasContent(t.id)?"EMPTY":isConfirmed(t.id)?"confirmed":"UNCONFIRMED"}`).join("\n")}
-function localPrompt(target){
+function localPrompt(){
   const s=state.spec, L=[];
-  L.push(`Build a responsive website for me${target!=="Any AI code generator"?` in ${target}`:""}. It must work well on phones, tablets and computers. Follow these requirements exactly and don't add features I haven't listed. Use clearly marked placeholder text and images where content is missing.`,"");
+  L.push(`Build a responsive website for me. It must work well on phones, tablets and computers. Follow these requirements exactly and don't add features I haven't listed. Use clearly marked placeholder text and images where content is missing.`,"");
   topics.forEach(t=>{if(!hasContent(t.id))return;
     L.push(`## ${t.label}${isConfirmed(t.id)?"":" (not yet confirmed)"}`);
     const n=(s.notes||{})[t.id], pg=pagesOf(s), nm=id=>(pg.find(p=>p.id===id)||{}).name;
@@ -289,14 +293,13 @@ function localPrompt(target){
 }
 async function generate(){
   if(busy)return;
-  const target=$("target").value;
-  if(aiMode!=="ai"){state.prompt=localPrompt(target);persist();renderAll();return}
+  if(aiMode!=="ai"){state.prompt=localPrompt();persist();renderAll();return}
   busy=true; ctl=new AbortController(); $("stopBtn").hidden=false; $("genBtn").disabled=true;
   $("out").hidden=false; $("out").textContent="Writing your prompt…"; $("copyBtn").hidden=true;
-  const p=`Write a build prompt that a non-technical person will paste into ${target==="Any AI code generator"?"a vibe-coding tool":target} to create their WEBSITE. The reader of the prompt is the AI tool, so use precise web terms it understands well (pages, sections, navigation, hero, call to action, responsive layout, form fields and validation), even though the person who gave the requirements is not technical.
+  const p=`Write a build prompt that a non-technical person will paste into an AI website builder to create their WEBSITE. The reader of the prompt is the AI tool, so use precise web terms it understands well (pages, sections, navigation, hero, call to action, responsive layout, form fields and validation), even though the person who gave the requirements is not technical.
 
 Write clear, direct instructions. Use these markdown headings in this order: Overview, Target visitors, Site map and navigation, Pages (each page with its sections in order, top to bottom), Features (with sub-lists Must have / Should have / Could have), Layout on every page (header, footer and other shared parts), Content and forms (information shown, form fields), Design (colours, typography mood, imagery, tone of voice), Technical requirements (responsive for phone/tablet/desktop, accessible, fast, SEO basics with page titles and descriptions, plus any limits given), Acceptance criteria (a checklist the user can test), Build order (first version = must-haves only, then pause for review). Where real text or images are not provided, ask the tool to use clearly marked placeholder content.
-Use ONLY the requirements below. Do not invent features. If something needed is missing, pick the simplest sensible default and mark it "(assumption)". Sections whose status is UNCONFIRMED: include them, but end each such item with "(not yet confirmed)".${target!=="Any AI code generator"?` Phrase it in the way that works best for ${target}.`:""}
+Use ONLY the requirements below. Do not invent features. If something needed is missing, pick the simplest sensible default and mark it "(assumption)". Sections whose status is UNCONFIRMED: include them, but end each such item with "(not yet confirmed)".
 Reply with only the prompt text, nothing before or after it.
 
 Requirements JSON:
@@ -309,7 +312,7 @@ ${statusList()}${topics.filter(t=>!BUILTIN.has(t.id)).map(t=>`\nExtra topic "${t
     state.prompt=text+(truncated?"\n\n[The prompt was cut short. Generate again.]":""); persist();
   }catch(e){
     const c=e&&e.code;
-    if(["not_granted","sampling_disabled","not_declared","capability_disabled","capability_removed"].includes(c)){aiMode="scripted";state.prompt=localPrompt(target);persist()}
+    if(["not_granted","sampling_disabled","not_declared","capability_disabled","capability_removed"].includes(c)){aiMode="scripted";state.prompt=localPrompt();persist()}
     else if(c==="cancelled"){state.prompt=e.text||state.prompt}
     else{$("genHint").textContent=c==="rate_limited"?"Too many requests just now. Wait a minute and try again.":"The prompt couldn't be written just now. Try again."}
   }finally{busy=false;ctl=null;$("stopBtn").hidden=true;renderAll()}
@@ -320,6 +323,55 @@ async function copy(){
   catch(e){const r=document.createRange();r.selectNodeContents($("out"));const s=getSelection();s.removeAllRanges();s.addRange(r);b.textContent="Selected, press Ctrl+C"}
   setTimeout(()=>b.textContent="Copy",2200);
 }
+
+/* ---------- build the website with Claude ---------- */
+/* The site is one self-contained HTML file shown in a sandboxed frame that fills the window. */
+function cleanHtml(t){const s=String(t||"").replace(/^\s*```(?:html)?\s*/i,"").replace(/```\s*$/,""), i=s.search(/<!doctype html|<html/i);return(i>0?s.slice(i):s).trim()}
+function showSite(){
+  const v=$("siteView"); v.hidden=false; document.body.style.overflow="hidden";
+  $("siteCode").hidden=!building; $("siteFrame").hidden=building||!state.site; $("siteStop").hidden=!building;
+  $("siteCopy").disabled=building||!state.site; $("siteRebuild").disabled=building;
+  if(!building&&state.site&&$("siteFrame").dataset.for!==state.site){$("siteFrame").srcdoc=state.site;$("siteFrame").dataset.for=state.site}
+}
+function closeSite(){if(building&&buildCtl)buildCtl.abort();$("siteView").hidden=true;document.body.style.overflow="";$("buildBtn").focus()}
+async function build(){
+  if(building||!state.prompt||aiMode!=="ai")return;
+  building=true; buildCtl=new AbortController(); renderAll(); showSite();
+  $("siteStatus").textContent="Claude is building your website. This can take a minute or two…";
+  $("siteCode").textContent="Starting…";
+  const p=`Build the complete website described in the build prompt below.
+
+Reply with ONLY one complete HTML document: start with <!DOCTYPE html> and write nothing before or after it (no markdown, no code fences, no explanation).
+Rules:
+- Everything in this one file: put CSS in a <style> tag and JavaScript in a <script> tag. Do not load any outside scripts, stylesheets or images. The only allowed outside resource is Google Fonts from fonts.googleapis.com.
+- Images: use CSS gradients, inline SVG or clearly labelled placeholder boxes. Never use image URLs.
+- If the site has several pages, put each page in its own <section> in this file and show one at a time with a small script. Menu items, links and buttons switch pages without reloading. Every page in the prompt must exist and be reachable.
+- Forms: handle submit in the script with preventDefault(), validate the fields and show a friendly confirmation on the page. Nothing is sent anywhere. Don't use alert().
+- Make it look polished and professional, responsive on phones, tablets and computers, and accessible.
+- Use real-sounding text from the prompt; where content is missing, use short, clearly marked placeholders.
+- Keep the code compact so the whole file fits in your answer.
+
+Build prompt:
+${state.prompt}`;
+  try{
+    const {text,truncated}=await sample(p,{modelTier:"complex",cache:false,signal:buildCtl.signal,onText:({text})=>{const c=$("siteCode");c.textContent=text;c.scrollTop=c.scrollHeight}});
+    state.site=cleanHtml(text); state.siteFor=state.prompt; persist();
+    $("siteStatus").textContent=truncated?"The website was cut short, so parts may be missing. Tap Build again to try again.":"Here is your website. Click around to try it.";
+  }catch(e){
+    const c=e&&e.code;
+    if(c==="cancelled"){$("siteStatus").textContent="Building stopped."+(state.site?" Showing your last website.":"")}
+    else $("siteStatus").textContent=c==="rate_limited"?"Too many requests just now. Wait a minute and tap Build again.":c==="not_granted"?"Claude wasn't allowed to build the website. You can still copy the prompt.":"The website couldn't be built just now. Tap Build again.";
+  }finally{building=false;buildCtl=null;renderAll();if(!$("siteView").hidden)showSite()}
+}
+function openBuild(){if(state.site&&state.siteFor===state.prompt){$("siteStatus").textContent="Here is your website. Click around to try it.";showSite()}else build()}
+async function copySite(){
+  const b=$("siteCopy");
+  try{await navigator.clipboard.writeText(state.site);b.textContent="Copied"}catch(e){b.textContent="Couldn't copy"}
+  setTimeout(()=>b.textContent="Copy code",2200);
+}
+$("buildBtn").onclick=openBuild; $("siteBack").onclick=closeSite; $("siteRebuild").onclick=build;
+$("siteStop").onclick=()=>buildCtl&&buildCtl.abort(); $("siteCopy").onclick=copySite;
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("siteView").hidden&&!building)closeSite()});
 
 /* ---------- guide editor ---------- */
 let draft=[];
